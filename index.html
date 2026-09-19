@@ -4290,6 +4290,99 @@ tr:nth-child(even){background:rgba(99,102,241,.035)!important;}
     color: #c4b5fd !important;
     border: 1px solid rgba(168, 85, 247, 0.3) !important;
 }
+/* ============================================================
+   CASH TUBE — RAINBOW ANIMATED TITLE
+   ============================================================ */
+
+.splash-title {
+    margin: 0;
+    font-size: 43px;
+    font-weight: 800;
+    letter-spacing: 7px;
+    
+    /* 🌈 Rainbow gradient */
+    background: linear-gradient(
+        90deg,
+        #a855f7 0%,
+        #22d3ee 25%,
+        #fbbf24 50%,
+        #f472b6 75%,
+        #a855f7 100%
+    );
+    background-size: 300% 100%;
+    
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+    
+    /* ✨ အရောင်တောက်စေရန် */
+    filter: drop-shadow(0 0 18px rgba(168, 85, 247, 0.55))
+            drop-shadow(0 0 30px rgba(34, 211, 238, 0.35));
+    
+    /* 🎬 ကာလာပြေးနေစေရန် */
+    animation: rainbowFlow 3s linear infinite;
+}
+
+/* 🌈 ကာလာပြေးခြင်း */
+@keyframes rainbowFlow {
+    0% {
+        background-position: 0% 50%;
+    }
+    100% {
+        background-position: 300% 50%;
+    }
+}
+
+/* ✨ Pulse ထပ်ထည့်ချင်ရင် (optional) */
+.splash-title {
+    animation: rainbowFlow 3s linear infinite, titlePulse 2s ease-in-out infinite;
+}
+
+@keyframes titlePulse {
+    0%, 100% {
+        transform: scale(1);
+        filter: drop-shadow(0 0 18px rgba(168, 85, 247, 0.55))
+                drop-shadow(0 0 30px rgba(34, 211, 238, 0.35));
+    }
+    50% {
+        transform: scale(1.05);
+        filter: drop-shadow(0 0 28px rgba(168, 85, 247, 0.8))
+                drop-shadow(0 0 45px rgba(34, 211, 238, 0.6));
+    }
+}
+background: linear-gradient(
+    90deg,
+    #fbbf24, #f59e0b, #f472b6, #ec4899, #fbbf24
+);
+.splash-sub {
+    margin: 10px 0 0;
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: 8px;
+    background: linear-gradient(90deg, #22d3ee, #a855f7, #22d3ee);
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: rainbowFlow 2s linear infinite;
+    filter: drop-shadow(0 0 10px rgba(34, 211, 238, 0.5));
+}
+.splash-diamond {
+    animation: diamondFloat 2.5s ease-in-out infinite,
+               diamondGlow 1.5s ease-in-out infinite;
+}
+
+@keyframes diamondGlow {
+    0%, 100% {
+        box-shadow: 0 0 25px rgba(168, 85, 247, 0.4),
+                    0 0 50px rgba(34, 211, 238, 0.25);
+    }
+    50% {
+        box-shadow: 0 0 40px rgba(168, 85, 247, 0.7),
+                    0 0 80px rgba(34, 211, 238, 0.5);
+    }
+}
 </style>
 
 </head>
