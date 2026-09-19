@@ -4244,6 +4244,52 @@ tr:nth-child(even){background:rgba(99,102,241,.035)!important;}
 [style*="background:#ffffff"],[style*="background: #ffffff"]{
   background:#0b0f24!important;
 }
+/* ============================================================
+   DASHBOARD LEADERBOARD — FULL DARK THEME
+   Box + Text နှစ်ခုလုံး အရောင်ညှိပြီး
+   ============================================================ */
+
+/* 1. Box အားလုံး — နက်ပြာ/ခရမ်း */
+#adHistoryList > div {
+    background: linear-gradient(90deg, rgba(25, 19, 48, 0.9), rgba(13, 12, 25, 0.9)) !important;
+    border: 1px solid rgba(155, 108, 255, 0.16) !important;
+}
+
+/* 2. Rank 1 row (Thuzar) — cyan highlight */
+#adHistoryList > div:first-child {
+    background: linear-gradient(90deg, rgba(20, 54, 69, 0.55), rgba(35, 19, 60, 0.7)) !important;
+    border-color: rgba(39, 230, 255, 0.4) !important;
+}
+
+/* 3. Username text — အဖြူရောင် (ထင်ရှားစေရန်) */
+#adHistoryList > div > div:nth-child(2) {
+    color: #f8f7ff !important;
+    font-weight: 600 !important;
+}
+
+/* 4. Rank နံပါတ်များ — မီးခိုးရောင် */
+#adHistoryList > div > div:first-child {
+    color: #aaa4bd !important;
+}
+
+/* 5. Rank 1 ရဲ့ နံပါတ် — cyan */
+#adHistoryList > div:first-child > div:first-child {
+    color: #67e8f9 !important;
+}
+
+/* 6. ads badge (ခရမ်းရောင်) */
+#adHistoryList > div > div:last-child {
+    background: linear-gradient(135deg, #7c3aed, #4f46e5) !important;
+    color: #ffffff !important;
+    box-shadow: 0 4px 12px rgba(124, 58, 237, 0.3) !important;
+}
+
+/* 7. Lock ခလုတ် (Ad 50 ခု ကြည့်ပါ) */
+#topViewerCard button:disabled {
+    background: linear-gradient(135deg, rgba(124, 58, 237, 0.25), rgba(34, 211, 238, 0.15)) !important;
+    color: #c4b5fd !important;
+    border: 1px solid rgba(168, 85, 247, 0.3) !important;
+}
 </style>
 
 </head>
