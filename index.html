@@ -5107,6 +5107,66 @@ const ADMIN_IDS = ["2021666", "7625227853"];
 const GIFT_FEE = 20;
 const REFERRAL_BONUS = 500;
 
+// FIRESTORE QUOTA OPTIMIZATION
+// Ad rewards are queued locally and synced in small batches instead of
+// writing to Firestore on every single ad view.
+const AD_SYNC_BATCH = 5;
+let _adRewardFlushPromise = null;
+function getPendingAdRewards() {
+    if (!currentUser) return { count: 0, coins: 0, lastTitle: '' };
+    try {
+        return JSON.parse(localStorage.getItem('pendingAdRewards_' + currentUser.uid) || '{"count":0,"coins":0,"lastTitle":""}');
+    } catch (e) { return { count: 0, coins: 0, lastTitle: '' }; }
+}
+function setPendingAdRewards(p) {
+    if (!currentUser) return;
+    localStorage.setItem('pendingAdRewards_' + currentUser.uid, JSON.stringify(p));
+}
+async function flushPendingAdRewards(force = false) {
+    if (!currentUser || _adRewardFlushPromise) return false;
+    const pending = getPendingAdRewards();
+    if (!pending.count || (!force && pending.count < AD_SYNC_BATCH)) return false;
+
+    _adRewardFlushPromise = (async () => {
+        try {
+            const today = new Date().toISOString().split('T')[0];
+            const adRef = db.collection('adWatches').doc(currentUser.uid + '_' + today);
+            const txRef = db.collection('transactions').doc();
+            const batch = db.batch();
+
+            batch.update(db.collection('users').doc(currentUser.uid), {
+                coins: firebase.firestore.FieldValue.increment(pending.coins),
+                totalAds: firebase.firestore.FieldValue.increment(pending.count)
+            });
+            batch.set(adRef, {
+                userId: currentUser.uid,
+                username: userData.username || 'User',
+                email: userData.email || '',
+                date: today,
+                count: firebase.firestore.FieldValue.increment(pending.count),
+                totalCoins: firebase.firestore.FieldValue.increment(pending.coins),
+                lastWatch: firebase.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
+            batch.set(txRef, {
+                userId: currentUser.uid,
+                type: 'ad_watch_batch',
+                amount: pending.coins,
+                description: `${pending.count} ads - ${pending.lastTitle || 'Ad Watch'}`,
+                timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            await batch.commit();
+            setPendingAdRewards({ count: 0, coins: 0, lastTitle: '' });
+            return true;
+        } catch (e) {
+            return false;
+        } finally {
+            _adRewardFlushPromise = null;
+        }
+    })();
+    return await _adRewardFlushPromise;
+}
+
+
 const LEVELS = [
     { level: 1, ads: 0, bonus: 0, title: 'Novice', vip: 'Bronze', color: '#cd7f32' },
     { level: 2, ads: 50, bonus: 1500, title: 'Rookie', vip: 'Bronze', color: '#cd7f32' },
@@ -5724,16 +5784,25 @@ async function loadLeaderboard(type = 'today') {
             snap.forEach(doc => records.push({ userId: doc.data().userId, ...doc.data() }));
             records.sort((a, b) => (b.totalCoins || 0) - (a.totalCoins || 0));
             const top = records.slice(0, 30);
-            for (const r of top) {
+            // Avoid 30 individual user reads. Firestore 'in' queries allow
+            // up to 10 IDs, so fetch the user data in small groups.
+            for (let i = 0; i < top.length; i += 10) {
+                const group = top.slice(i, i + 10);
+                const ids = group.map(r => r.userId).filter(Boolean);
+                if (!ids.length) continue;
                 try {
-                    const uDoc = await db.collection('users').doc(r.userId).get();
-                    if (uDoc.exists) {
-                        users.push({
-                            uid: r.userId, name: uDoc.data().username || 'User',
+                    const uSnap = await db.collection('users')
+                        .where(firebase.firestore.FieldPath.documentId(), 'in', ids).get();
+                    const userMap = {};
+                    uSnap.forEach(d => userMap[d.id] = d.data());
+                    group.forEach(r => {
+                        const d = userMap[r.userId];
+                        if (d) users.push({
+                            uid: r.userId, name: d.username || 'User',
                             coins: r.totalCoins || 0, ads: r.count || 0,
-                            level: getLevelFromAds(uDoc.data().totalAds || 0)
+                            level: getLevelFromAds(d.totalAds || 0)
                         });
-                    }
+                    });
                 } catch (e) {}
             }
         } else {
@@ -5960,50 +6029,37 @@ async function claimAdReward() {
         updateUI();
         updateLevelUI();
         updateAchievementsUI();
-        try {
-            await db.collection('users').doc(currentUser.uid).update({
-                coins: firebase.firestore.FieldValue.increment(reward),
-                totalAds: firebase.firestore.FieldValue.increment(1)
-            });
-            await db.collection('transactions').add({
-                userId: currentUser.uid, type: 'ad_watch', amount: reward,
-                description: `${currentAdCard.title} - ${reward} Coins`,
-                timestamp: firebase.firestore.FieldValue.serverTimestamp()
-            });
-        } catch (err) { saveTransactionLocal('ad_watch', reward, currentAdCard.title); }
-        await saveAdWatchRecord(reward);
+
+        // Queue the Firestore writes. One batch is committed every few ads.
+        const pending = getPendingAdRewards();
+        pending.count += 1;
+        pending.coins += reward;
+        pending.lastTitle = currentAdCard.title || 'Ad Watch';
+        setPendingAdRewards(pending);
+
+        const flushed = await flushPendingAdRewards(false);
         localStorage.setItem('adClaim_' + currentAdCard.id + '_' + currentUser.uid, Date.now().toString());
         closeAdPageAndReturn();
         showCoinAnimation(reward, newCoins);
         renderAdCards();
         showToast(`✅ +${reward} Coins ရပါပြီ!`, 'success');
-        loadDashboard();
-    } catch (error) { showToast('❌ Failed', 'error'); closeAdPageAndReturn(); }
-    finally { setTimeout(() => { releaseCoinLock(); syncLocalTransactions(); }, 1500); }
+        if (flushed) loadDashboard();
+    } catch (error) {
+        showToast('❌ Failed', 'error');
+        closeAdPageAndReturn();
+    } finally {
+        setTimeout(() => releaseCoinLock(), 300);
+    }
 }
 
 async function saveAdWatchRecord(reward) {
-    try {
-        const today = new Date().toISOString().split('T')[0];
-        const recordId = currentUser.uid + '_' + today;
-        const recordRef = db.collection('adWatches').doc(recordId);
-        const recordDoc = await recordRef.get();
-        if (recordDoc.exists) {
-            await recordRef.update({
-                count: firebase.firestore.FieldValue.increment(1),
-                totalCoins: firebase.firestore.FieldValue.increment(reward),
-                username: userData.username || 'User', email: userData.email || '',
-                lastWatch: firebase.firestore.FieldValue.serverTimestamp()
-            });
-        } else {
-            await recordRef.set({
-                userId: currentUser.uid, username: userData.username || 'User',
-                email: userData.email || '', date: today, count: 1, totalCoins: reward,
-                firstWatch: firebase.firestore.FieldValue.serverTimestamp(),
-                lastWatch: firebase.firestore.FieldValue.serverTimestamp()
-            });
-        }
-    } catch (err) {}
+    // Kept for compatibility with older code paths. New ad rewards use
+    // flushPendingAdRewards() so repeated views do not hit Firestore.
+    const pending = getPendingAdRewards();
+    pending.count += 1;
+    pending.coins += reward;
+    setPendingAdRewards(pending);
+    return await flushPendingAdRewards(false);
 }
 
 // ============================================================
@@ -6205,14 +6261,35 @@ function updateWithdrawUI() {
 //  EXCHANGE
 // ============================================================
 async function loadExchangeRate() {
+    const cacheKey = 'cachedExchangeRate';
+    const TTL = 5 * 60 * 1000;
+    try {
+        const cached = JSON.parse(localStorage.getItem(cacheKey) || 'null');
+        if (cached && cached.timestamp && Date.now() - cached.timestamp < TTL) {
+            exchangeRate = cached.rate || 3000;
+            mmkRate = cached.mmkRate || 0;
+            isExchangeOpen = cached.isExchangeOpen !== false;
+            updateExchangeRateUI();
+            updateExchangeStatusUI();
+            return;
+        }
+    } catch (e) {}
+
     try {
         const doc = await db.collection('settings').doc('exchangeRate').get();
         if (doc.exists) {
-            exchangeRate = doc.data().rate || 3000;
-            mmkRate = doc.data().mmkRate || 0;
-            isExchangeOpen = doc.data().isExchangeOpen !== false;
+            const data = doc.data();
+            exchangeRate = data.rate || 3000;
+            mmkRate = data.mmkRate || 0;
+            isExchangeOpen = data.isExchangeOpen !== false;
+            localStorage.setItem(cacheKey, JSON.stringify({
+                rate: exchangeRate, mmkRate, isExchangeOpen, timestamp: Date.now()
+            }));
         } else {
-            await db.collection('settings').doc('exchangeRate').set({ rate: 3000, mmkRate: 0, isExchangeOpen: true, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+            await db.collection('settings').doc('exchangeRate').set({
+                rate: 3000, mmkRate: 0, isExchangeOpen: true,
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
         }
     } catch (e) { exchangeRate = 3000; mmkRate = 0; isExchangeOpen = true; }
     updateExchangeRateUI();
@@ -6260,7 +6337,7 @@ function updateExchangeStatusUI() {
 async function adminSetRate() {
     const rate = parseInt(document.getElementById('adminRate').value);
     if (!rate || rate < 1) { showToast('Invalid', 'error'); return; }
-    await db.collection('settings').doc('exchangeRate').set({ rate, mmkRate, isExchangeOpen, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
+    await db.collection('settings').doc('exchangeRate').set({ rate, mmkRate, isExchangeOpen, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true }); localStorage.removeItem('cachedExchangeRate');
     exchangeRate = rate;
     updateExchangeRateUI();
     showToast('✅ Rate set');
@@ -6268,14 +6345,14 @@ async function adminSetRate() {
 async function adminSetMmkRate() {
     const rate = parseInt(document.getElementById('adminMmkRate').value);
     if (!rate || rate < 1) { showToast('Invalid', 'error'); return; }
-    await db.collection('settings').doc('exchangeRate').set({ rate: exchangeRate, mmkRate: rate, isExchangeOpen, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
+    await db.collection('settings').doc('exchangeRate').set({ rate: exchangeRate, mmkRate: rate, isExchangeOpen, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true }); localStorage.removeItem('cachedExchangeRate');
     mmkRate = rate;
     updateExchangeRateUI();
     showToast('✅ MMK set');
 }
 async function adminToggleExchange() {
     isExchangeOpen = !isExchangeOpen;
-    await db.collection('settings').doc('exchangeRate').set({ rate: exchangeRate, mmkRate, isExchangeOpen, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
+    await db.collection('settings').doc('exchangeRate').set({ rate: exchangeRate, mmkRate, isExchangeOpen, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true }); localStorage.removeItem('cachedExchangeRate');
     updateExchangeStatusUI();
     showToast(isExchangeOpen ? '✅ Opened' : '🔒 Closed');
 }
@@ -6426,7 +6503,7 @@ async function handleLogin() {
     try { await auth.signInWithEmailAndPassword(email, password); showToast('✅ Welcome!'); }
     catch (e) { showAuthError(e.message); }
 }
-function handleLogout() { auth.signOut(); showToast('👋 Logged out'); }
+async function handleLogout() { await flushPendingAdRewards(true); await auth.signOut(); showToast('👋 Logged out'); }
 
 // ============================================================
 //  AUTH STATE
@@ -6465,27 +6542,27 @@ auth.onAuthStateChanged(async (user) => {
             }
         } catch (error) {}
 
+        // Restore any locally queued ad rewards before the first user snapshot.
+        const pendingOnLogin = getPendingAdRewards();
+        if (pendingOnLogin.count > 0) {
+            userData.coins = (userData.coins || 0) + pendingOnLogin.coins;
+            userData.totalAds = (userData.totalAds || 0) + pendingOnLogin.count;
+            saveCoinsToLocal(userData.coins);
+            updateUI();
+            await flushPendingAdRewards(true);
+        }
+
         await loadExchangeRate();
         await loadAdLinksFromFirestore();
         await loadAppLinksFromFirestore();
 
-        db.collection('settings').doc('exchangeRate').onSnapshot((doc) => {
-            if (doc.exists) {
-                const data = doc.data();
-                exchangeRate = data.rate || 3000;
-                mmkRate = data.mmkRate || 0;
-                isExchangeOpen = data.isExchangeOpen !== false;
-                updateExchangeRateUI();
-                updateExchangeStatusUI();
-            }
-        });
-
         db.collection('users').doc(user.uid).onSnapshot((doc) => {
             if (doc.exists) {
                 const d = doc.data();
-                userData.coins = d.coins || 0;
+                const pendingLive = getPendingAdRewards();
+                userData.coins = (d.coins || 0) + (pendingLive.coins || 0);
                 userData.usdt = d.usdt || 0;
-                userData.totalAds = d.totalAds || 0;
+                userData.totalAds = (d.totalAds || 0) + (pendingLive.count || 0);
                 userData.referralCount = d.referralCount || 0;
                 userData.referralEarned = d.referralEarned || 0;
                 userData.claimedLevels = d.claimedLevels || [];
@@ -6494,14 +6571,19 @@ auth.onAuthStateChanged(async (user) => {
             }
         });
 
-        db.collection('users').doc(user.uid).update({ lastActive: firebase.firestore.FieldValue.serverTimestamp() }).catch(() => {});
+        const activeKey = 'lastActiveSync_' + user.uid;
+        const lastActiveSync = parseInt(localStorage.getItem(activeKey) || '0');
+        if (Date.now() - lastActiveSync > 24 * 60 * 60 * 1000) {
+            db.collection('users').doc(user.uid).update({
+                lastActive: firebase.firestore.FieldValue.serverTimestamp()
+            }).then(() => localStorage.setItem(activeKey, Date.now().toString())).catch(() => {});
+        }
 
         renderAdCards();
         updateDailyBonusUI();
         loadDashboard();
 
         setInterval(() => updateDailyBonusUI(), 60000);
-        setInterval(() => loadDashboard(), 60000);
         setInterval(() => saveCoinsToLocal(userData.coins), 60000);
     } else {
         currentUser = null;
@@ -6512,18 +6594,43 @@ auth.onAuthStateChanged(async (user) => {
 });
 
 async function loadAdLinksFromFirestore() {
+    const key = 'cachedAdLinks';
+    const TTL = 10 * 60 * 1000;
+    try {
+        const cached = JSON.parse(localStorage.getItem(key) || 'null');
+        if (cached && Date.now() - cached.timestamp < TTL) {
+            adLinks = cached.links || [];
+            renderAdCards();
+            return;
+        }
+    } catch (e) {}
     try {
         const doc = await db.collection('settings').doc('adLinks').get();
-        if (doc.exists && doc.data().links?.length > 0) { adLinks = doc.data().links; localStorage.setItem('adLinks', JSON.stringify(adLinks)); }
-        else { adLinks = JSON.parse(localStorage.getItem('adLinks')) || []; }
-        renderAdCards();
-    } catch (e) { adLinks = JSON.parse(localStorage.getItem('adLinks')) || []; renderAdCards(); }
+        if (doc.exists && doc.data().links?.length > 0) {
+            adLinks = doc.data().links;
+            localStorage.setItem(key, JSON.stringify({ links: adLinks, timestamp: Date.now() }));
+            localStorage.setItem('adLinks', JSON.stringify(adLinks));
+        } else adLinks = JSON.parse(localStorage.getItem('adLinks')) || [];
+    } catch (e) { adLinks = JSON.parse(localStorage.getItem('adLinks')) || []; }
+    renderAdCards();
 }
 async function loadAppLinksFromFirestore() {
+    const key = 'cachedAppLinks';
+    const TTL = 10 * 60 * 1000;
+    try {
+        const cached = JSON.parse(localStorage.getItem(key) || 'null');
+        if (cached && Date.now() - cached.timestamp < TTL) {
+            appLinks = cached.links || [];
+            return;
+        }
+    } catch (e) {}
     try {
         const doc = await db.collection('settings').doc('appLinks').get();
-        if (doc.exists && doc.data().links?.length > 0) { appLinks = doc.data().links; localStorage.setItem('appLinks', JSON.stringify(appLinks)); }
-        else { appLinks = JSON.parse(localStorage.getItem('appLinks')) || []; }
+        if (doc.exists && doc.data().links?.length > 0) {
+            appLinks = doc.data().links;
+            localStorage.setItem(key, JSON.stringify({ links: appLinks, timestamp: Date.now() }));
+            localStorage.setItem('appLinks', JSON.stringify(appLinks));
+        } else appLinks = JSON.parse(localStorage.getItem('appLinks')) || [];
     } catch (e) { appLinks = JSON.parse(localStorage.getItem('appLinks')) || []; }
 }
 
@@ -6623,7 +6730,7 @@ async function adminAddAppLink() {
     appLinks = links;
     document.getElementById('adminAppLink').value = '';
     loadAppList();
-    try { await db.collection('settings').doc('appLinks').set({ links }); } catch (e) {}
+    try { await db.collection('settings').doc('appLinks').set({ links }); localStorage.removeItem('cachedAppLinks'); } catch (e) {}
     showToast('✅ Added');
 }
 async function adminRemoveAppLink(i) {
@@ -6633,7 +6740,7 @@ async function adminRemoveAppLink(i) {
     localStorage.setItem('appLinks', JSON.stringify(links));
     appLinks = links;
     loadAppList();
-    try { await db.collection('settings').doc('appLinks').set({ links }); } catch (e) {}
+    try { await db.collection('settings').doc('appLinks').set({ links }); localStorage.removeItem('cachedAppLinks'); } catch (e) {}
 }
 function loadAdList() {
     const tbody = document.getElementById('adListBody');
@@ -6650,7 +6757,7 @@ async function adminAddAdLink() {
     adLinks = links;
     document.getElementById('adminAdLink').value = '';
     loadAdList();
-    try { await db.collection('settings').doc('adLinks').set({ links }); } catch (e) {}
+    try { await db.collection('settings').doc('adLinks').set({ links }); localStorage.removeItem('cachedAdLinks'); } catch (e) {}
     renderAdCards();
     showToast('✅ Added');
 }
@@ -6661,7 +6768,7 @@ async function adminRemoveAdLink(i) {
     localStorage.setItem('adLinks', JSON.stringify(links));
     adLinks = links;
     loadAdList();
-    try { await db.collection('settings').doc('adLinks').set({ links }); } catch (e) {}
+    try { await db.collection('settings').doc('adLinks').set({ links }); localStorage.removeItem('cachedAdLinks'); } catch (e) {}
     renderAdCards();
 }
 function adminToggleWithdraw() {
