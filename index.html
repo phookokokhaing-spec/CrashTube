@@ -4443,7 +4443,7 @@ tr:nth-child(even){background:rgba(99,102,241,.035)!important;}
                     <input type="password" id="signupPassword" placeholder="••••••••" />
                 </div>
                 <div class="form-group">
-                    <label>Referral Code (Optional)</label>
+                    <label>Referral Code <span style="color:var(--rose-500);">*</span></label>
                     <input type="text" id="signupRefCode" placeholder="ABC12345" maxlength="10" style="text-transform:uppercase;" />
                     <span class="ref-badge" id="refBadge"></span>
                 </div>
@@ -6396,7 +6396,6 @@ async function requestWithdraw() {
     showToast('✅ Requested');
     document.getElementById('withdrawAmount').value = '';
 }
-
 // ============================================================
 //  AUTH
 // ============================================================
@@ -6411,47 +6410,64 @@ function showAuthError(msg) {
     el.classList.add('show');
 }
 
+// ✅ Referral link မှ ?ref= ပါလာရင် Auto-fill လုပ်ပေးမည်
+//    ဒါပေမယ့် Sign Up ခလုတ်ကို ဘယ်တော့မှ မပိတ်ပါ
 window.addEventListener('load', () => {
     const urlParams = new URLSearchParams(window.location.search);
     const refParam = urlParams.get('ref');
-    if (refParam) {
-        const input = document.getElementById('signupRefCode');
-        if (input) {
-            input.value = refParam.toUpperCase();
-            document.getElementById('refBadge').textContent = '✅ Applied';
-        }
+    const refInput = document.getElementById('signupRefCode');
+    const refBadge = document.getElementById('refBadge');
+
+    if (refParam && refInput) {
+        // Link မှ code ပါလာရင် auto-fill + lock
+        refInput.value = refParam.toUpperCase();
+        refInput.readOnly = true;
+        refInput.style.background = 'var(--slate-100)';
+        refInput.style.cursor = 'not-allowed';
+        if (refBadge) refBadge.textContent = '✅ Applied (locked)';
+        // Signup form ကို ပြပါ
         setTimeout(() => { if (document.getElementById('signupForm')) toggleAuth('signup'); }, 500);
     }
+    // ref မပါလည်း Sign Up ခလုတ် အလုပ်လုပ်နေတယ်
 });
 
 async function handleSignup() {
-    const username = document.getElementById('signupUsername').value.trim() || 'User';
+    const username = document.getElementById('signupUsername').value.trim();
     const email = document.getElementById('signupEmail').value.trim();
     const password = document.getElementById('signupPassword').value;
     const refCodeInput = document.getElementById('signupRefCode').value.trim().toUpperCase();
 
-    if (!email || !password) { showAuthError('Email & Password required'); return; }
-    if (password.length < 6) { showAuthError('Password min 6 chars'); return; }
+    // ✅ Field တွေ အကုန်စစ်
+    if (!username) { showAuthError('❌ အမည် ဖြည့်ပါ'); return; }
+    if (!email) { showAuthError('❌ Email ဖြည့်ပါ'); return; }
+    if (!password) { showAuthError('❌ Password ဖြည့်ပါ'); return; }
+    if (password.length < 6) { showAuthError('❌ Password အနည်းဆုံး ၆ လုံး ဖြစ်ရမည်'); return; }
+
+    // ✅ Referral Code မဖြစ်မနေ လိုအပ်သည်
+    if (!refCodeInput) {
+        showAuthError('❌ Referral Code ဖြည့်ရန် လိုအပ်ပါသည်');
+        return;
+    }
 
     let referredBy = '';
     let referrerData = null;
 
-    if (refCodeInput) {
-        try {
-            const refSnap = await db.collection('users').where('refCode', '==', refCodeInput).limit(1).get();
-            if (!refSnap.empty) {
-                referredBy = refCodeInput;
-                referrerData = refSnap.docs[0];
-            } else {
-                showAuthError('❌ Referral Code မမှန်ပါ');
-                return;
-            }
-        } catch (e) {
-            showAuthError('❌ Code check failed');
+    // ✅ Referral Code မှန်/မမှန် စစ်
+    try {
+        const refSnap = await db.collection('users').where('refCode', '==', refCodeInput).limit(1).get();
+        if (!refSnap.empty) {
+            referredBy = refCodeInput;
+            referrerData = refSnap.docs[0];
+        } else {
+            showAuthError('❌ Referral Code မမှန်ပါ');
             return;
         }
+    } catch (e) {
+        showAuthError('❌ Code စစ်ဆေးမှု မအောင်မြင်ပါ');
+        return;
     }
 
+    // ✅ အားလုံး မှန်ရင် အကောင့်ဖန်တီး
     try {
         const cred = await auth.createUserWithEmailAndPassword(email, password);
         const myRefCode = generateRefCode();
@@ -6490,7 +6506,7 @@ async function handleSignup() {
         }
 
         saveCoinsToLocal(1000);
-        showToast('✅ Account created!' + (referredBy ? ` +${REFERRAL_BONUS} to referrer` : ''));
+        showToast('✅ အကောင့်ဖွင့်ပြီးပါပြီ!');
         toggleAuth('login');
         window.history.replaceState({}, '', window.location.pathname);
     } catch (e) { showAuthError(e.message); }
@@ -6504,7 +6520,6 @@ async function handleLogin() {
     catch (e) { showAuthError(e.message); }
 }
 async function handleLogout() { await flushPendingAdRewards(true); await auth.signOut(); showToast('👋 Logged out'); }
-
 // ============================================================
 //  AUTH STATE
 // ============================================================
