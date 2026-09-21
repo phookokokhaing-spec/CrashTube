@@ -4383,6 +4383,726 @@ background: linear-gradient(
                     0 0 80px rgba(34, 211, 238, 0.5);
     }
 }
+<!-- 🎬 VIDEO TASKS CSS -->
+.video-search-wrap { position: relative; margin-bottom: 12px; }
+.video-search-wrap input {
+    width: 100%; padding: 14px 48px 14px 46px;
+    border-radius: 18px; border: 1px solid var(--neo-line);
+    background: rgba(255, 255, 255, 0.045); color: #f8f7ff;
+    font-size: 13px; outline: none; font-family: inherit;
+    transition: all 0.2s;
+}
+.video-search-wrap input:focus {
+    border-color: rgba(168, 85, 247, 0.5);
+    box-shadow: 0 0 0 4px rgba(168, 85, 247, 0.10);
+}
+.video-search-wrap .vs-icon {
+    position: absolute; left: 16px; top: 50%; transform: translateY(-50%);
+    color: #77708e; font-size: 14px; pointer-events: none;
+}
+.video-search-wrap .vs-btn {
+    position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+    width: 36px; height: 36px; border-radius: 50%;
+    background: linear-gradient(135deg, #7c3aed, #a855f7 55%, #22d3ee);
+    border: none; color: #fff; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; font-size: 13px;
+}
+.cinema-wrap {
+    position: relative; margin-bottom: 12px; border-radius: 22px;
+    overflow: hidden; background: #000;
+    border: 1px solid rgba(168, 85, 247, 0.22);
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45), 0 0 60px rgba(168, 85, 247, 0.12);
+    aspect-ratio: 16 / 9;
+    max-height: 260px;
+}
+.cinema-wrap #player { width: 100%; height: 100%; position: relative; z-index: 1; }
+.watch-timer {
+    position: absolute; bottom: 12px; left: 12px;
+    background: rgba(10, 9, 22, 0.9);
+    backdrop-filter: blur(14px);
+    color: #fff; padding: 7px 14px; border-radius: 999px;
+    font-size: 11px; font-weight: 700;
+    display: none; z-index: 5;
+    border: 1px solid rgba(168, 85, 247, 0.4);
+}
+.watch-timer i { margin-right: 6px; color: #22d3ee; animation: pulseDot 1.5s infinite; }
+@keyframes pulseDot { 0%,100%{opacity:1} 50%{opacity:.4} }
+.video-claim-popup {
+    position: absolute; bottom: 12px; right: 12px;
+    background: linear-gradient(135deg, #fbbf24, #f59e0b);
+    color: #1a1a2e; border: none;
+    padding: 11px 20px; border-radius: 999px;
+    font-weight: 900; font-size: 12px;
+    cursor: pointer; display: none; z-index: 6;
+    font-family: inherit;
+    box-shadow: 0 8px 0 rgba(120,70,0,.5), 0 20px 40px rgba(251,191,36,.5);
+    animation: coinPop 1.4s infinite ease-in-out;
+}
+@keyframes coinPop {
+    0%,100% { transform: translateY(0) scale(1) rotate(-2deg); }
+    50% { transform: translateY(-6px) scale(1.06) rotate(2deg); }
+}
+.video-pills-scroll {
+    display: flex; gap: 8px; overflow-x: auto;
+    padding: 4px 0 10px; scrollbar-width: none; margin-bottom: 4px;
+}
+.video-pills-scroll::-webkit-scrollbar { display: none; }
+.video-pill {
+    display: flex; align-items: center; gap: 6px;
+    padding: 8px 16px;
+    background: rgba(255, 255, 255, 0.045);
+    border: 1px solid var(--neo-line);
+    border-radius: 999px; color: #aaa4bd;
+    font-size: 11px; font-weight: 700;
+    cursor: pointer; white-space: nowrap; flex-shrink: 0;
+    font-family: inherit; transition: all 0.2s;
+}
+.video-pill.active {
+    background: linear-gradient(135deg, #7c3aed, #a855f7 55%, #22d3ee);
+    color: #fff; border-color: transparent;
+}
+.v-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 11px; }
+.v-card {
+    background: linear-gradient(145deg, rgba(35,25,65,.92), rgba(14,13,27,.96));
+    border: 1px solid var(--neo-line);
+    border-radius: 18px; overflow: hidden; cursor: pointer;
+    transition: all 0.3s;
+}
+.v-card:active { transform: scale(0.97); }
+.v-thumb { position: relative; width: 100%; aspect-ratio: 16/9; overflow: hidden; background: #000; }
+.v-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.v-thumb .play-overlay {
+    position: absolute; inset: 0;
+    background: linear-gradient(180deg, transparent 40%, rgba(0,0,0,.75));
+    display: flex; align-items: center; justify-content: center; opacity: 0;
+}
+.v-card:hover .play-overlay { opacity: 1; }
+.v-thumb .play-overlay .play-icon {
+    width: 44px; height: 44px; border-radius: 50%;
+    background: linear-gradient(135deg, #7c3aed, #a855f7 55%, #22d3ee);
+    color: #fff; display: flex; align-items: center; justify-content: center;
+    font-size: 15px; box-shadow: 0 0 28px rgba(124,58,237,.8);
+}
+.v-thumb .time-ago {
+    position: absolute; bottom: 6px; right: 6px;
+    background: rgba(0,0,0,.85); padding: 3px 8px;
+    border-radius: 6px; font-size: 9px; color: #fff; font-weight: 700;
+}
+.v-title {
+    padding: 10px 12px 6px; font-size: 11px; font-weight: 600;
+    color: #f5f3ff; line-height: 1.4;
+    display: -webkit-box; -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical; overflow: hidden; min-height: 44px;
+}
+.v-channel { padding: 0 10px 10px; font-size: 9px; color: #77708e; }
+.series-group {
+    grid-column: 1 / -1;
+    background: linear-gradient(135deg, rgba(168,85,247,.10), rgba(34,211,238,.05));
+    border: 1px solid rgba(168,85,247,.3);
+    border-radius: 18px; padding: 12px; margin-bottom: 4px;
+}
+.series-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 10px; gap: 10px;
+}
+.series-title-wrap { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
+.series-title-wrap .series-icon { font-size: 20px; }
+.series-title-wrap .series-info { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.series-title-wrap .series-name {
+    font-size: 12px; font-weight: 800; color: #fff;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.series-title-wrap .series-meta { font-size: 9px; color: #77708e; display: flex; gap: 8px; margin-top: 2px; }
+.series-episodes-count {
+    background: linear-gradient(135deg, #7c3aed, #a855f7);
+    color: #fff; padding: 2px 8px; border-radius: 999px;
+    font-size: 9px; font-weight: 800;
+}
+.series-play-all-btn {
+    background: linear-gradient(135deg, #fbbf24, #f59e0b);
+    color: #1a1a2e; border: none;
+    padding: 8px 14px; border-radius: 999px;
+    font-size: 10px; font-weight: 800;
+    cursor: pointer; display: flex; align-items: center; gap: 5px;
+    flex-shrink: 0; font-family: inherit;
+}
+.series-episodes { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 8px; }
+.series-episode {
+    background: rgba(0,0,0,.3); border: 1px solid var(--neo-line);
+    border-radius: 10px; overflow: hidden; cursor: pointer;
+    position: relative; transition: all 0.2s;
+}
+.series-episode:active { transform: scale(0.96); }
+.series-episode .ep-thumb { width: 100%; aspect-ratio: 16/9; object-fit: cover; display: block; }
+.series-episode .ep-title {
+    padding: 5px 8px; font-size: 9px; font-weight: 600; color: #fff;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.series-episode .ep-number {
+    position: absolute; top: 4px; left: 4px;
+    background: linear-gradient(135deg, #fbbf24, #f59e0b);
+    color: #1a1a2e; font-size: 9px; font-weight: 900;
+    padding: 2px 6px; border-radius: 6px;
+}
+.video-loading, .video-no-results {
+    grid-column: 1 / -1; text-align: center;
+    padding: 50px 20px; color: #77708e;
+}
+.video-loading i, .video-no-results i {
+    font-size: 38px; display: block; margin-bottom: 14px; color: #a855f7;
+}
+.video-loading i { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.video-error {
+    position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%,-50%);
+    color: #c4b5fd; font-size: 12px; text-align: center;
+    padding: 20px; z-index: 3; display: none;
+}
+.video-error i { font-size: 38px; display: block; margin-bottom: 10px; color: #a855f7; }
+@media (min-width: 768px) { .v-grid { grid-template-columns: repeat(3, 1fr); } }
+/* 🎬 Video Cards ကို ချုံ့ခြင်း */
+.v-grid {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+    width: 100% !important;
+}
+
+.v-card {
+    min-width: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    border-radius: 14px !important;
+    overflow: hidden !important;
+}
+
+.v-thumb {
+    width: 100% !important;
+    aspect-ratio: 16 / 9 !important;
+    display: block !important;
+}
+
+.v-thumb img {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: cover !important;
+    display: block !important;
+}
+
+.v-title {
+    padding: 8px 9px 4px !important;
+    font-size: 10px !important;
+    line-height: 1.3 !important;
+    min-height: 38px !important;
+    -webkit-line-clamp: 2 !important;
+}
+
+.v-channel {
+    padding: 0 9px 8px !important;
+    font-size: 8px !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+}
+
+/* 📱 ဖုန်းအသေးအတွက် ထပ်ချုံ့ */
+@media (max-width: 420px) {
+    .v-grid {
+        gap: 6px !important;
+    }
+    .v-title {
+        font-size: 9.5px !important;
+        padding: 7px 8px 3px !important;
+        min-height: 34px !important;
+    }
+    .v-channel {
+        font-size: 7.5px !important;
+        padding: 0 8px 7px !important;
+    }
+    .v-thumb .time-ago {
+        font-size: 8px !important;
+        padding: 2px 6px !important;
+    }
+}
+
+/* 🖥️ Tablet/Desktop အတွက် 3 ကဒ် */
+@media (min-width: 720px) {
+    .v-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+        gap: 10px !important;
+    }
+}
+/* ============================================================
+   🎬 FINAL FIX — ကဒ်တွေ ချုံ့ခြင်း
+   ============================================================ */
+
+/* === VIDEO CARDS — နှစ်ကဒ် အပြည့်မြင်ရအောင် === */
+.v-grid {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 6px !important;
+    width: 100% !important;
+}
+
+.v-card {
+    min-width: 0 !important;
+    max-width: 100% !important;
+    width: 100% !important;
+    border-radius: 10px !important;
+    overflow: hidden !important;
+    box-sizing: border-box !important;
+}
+
+.v-thumb {
+    width: 100% !important;
+    aspect-ratio: 16 / 9 !important;
+    display: block !important;
+}
+
+.v-thumb img {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: cover !important;
+    display: block !important;
+}
+
+.v-title {
+    padding: 5px 6px 2px !important;
+    font-size: 9px !important;
+    line-height: 1.25 !important;
+    min-height: 28px !important;
+    -webkit-line-clamp: 2 !important;
+}
+
+.v-channel {
+    padding: 0 6px 5px !important;
+    font-size: 7px !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+}
+
+.v-thumb .time-ago {
+    font-size: 7px !important;
+    padding: 1px 5px !important;
+    bottom: 3px !important;
+    right: 3px !important;
+}
+
+.v-thumb .play-overlay .play-icon {
+    width: 30px !important;
+    height: 30px !important;
+    font-size: 11px !important;
+}
+
+/* === SERIES — ချုံ့ခြင်း === */
+.series-group {
+    padding: 8px !important;
+    border-radius: 12px !important;
+    margin-bottom: 4px !important;
+}
+
+.series-header {
+    margin-bottom: 6px !important;
+    gap: 6px !important;
+}
+
+.series-title-wrap .series-icon {
+    font-size: 16px !important;
+}
+
+.series-title-wrap .series-name {
+    font-size: 10px !important;
+}
+
+.series-title-wrap .series-meta {
+    font-size: 7.5px !important;
+}
+
+.series-episodes-count {
+    font-size: 7.5px !important;
+    padding: 1px 6px !important;
+}
+
+.series-play-all-btn {
+    padding: 5px 9px !important;
+    font-size: 8px !important;
+    gap: 3px !important;
+}
+
+.series-episodes {
+    grid-template-columns: repeat(auto-fill, minmax(70px, 1fr)) !important;
+    gap: 5px !important;
+}
+
+.series-episode {
+    border-radius: 7px !important;
+}
+
+.series-episode .ep-thumb {
+    width: 100% !important;
+    aspect-ratio: 16 / 9 !important;
+    object-fit: cover !important;
+}
+
+.series-episode .ep-title {
+    padding: 3px 5px !important;
+    font-size: 7.5px !important;
+}
+
+.series-episode .ep-number {
+    font-size: 7px !important;
+    padding: 1px 4px !important;
+    top: 3px !important;
+    left: 3px !important;
+}
+
+/* === AD CARDS — ချုံ့ခြင်း === */
+.ad-scroll {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+    width: 100% !important;
+}
+
+.ad-card {
+    min-width: 0 !important;
+    max-width: 100% !important;
+    width: 100% !important;
+    height: 130px !important;
+    padding: 10px !important;
+    box-sizing: border-box !important;
+    border-radius: 14px !important;
+}
+
+.ad-icon {
+    font-size: 24px !important;
+    width: 34px !important;
+    height: 34px !important;
+    border-radius: 11px !important;
+    margin-bottom: 6px !important;
+}
+
+.ad-title {
+    font-size: 10px !important;
+    margin-bottom: 2px !important;
+    margin-top: 0 !important;
+}
+
+.ad-reward {
+    margin-bottom: 6px !important;
+}
+
+.ad-amount {
+    font-size: 14px !important;
+}
+
+.ad-coin {
+    font-size: 9px !important;
+}
+
+.ad-btn {
+    padding: 6px !important;
+    font-size: 9px !important;
+    border-radius: 9px !important;
+    gap: 3px !important;
+}
+
+.ad-cd {
+    font-size: 8px !important;
+    margin-top: 3px !important;
+}
+
+/* === SECTION BLOCK — padding ချုံ့ === */
+.section-block {
+    padding: 12px !important;
+    margin: 10px 10px 0 !important;
+}
+
+.section-title-block {
+    font-size: 12px !important;
+}
+
+.section-see-all {
+    font-size: 10px !important;
+    padding: 4px 10px !important;
+}
+
+/* === CINEMA PLAYER — ချုံ့ === */
+.cinema-wrap {
+    height: 180px !important;
+    max-height: 180px !important;
+    border-radius: 14px !important;
+    margin-bottom: 8px !important;
+}
+
+/* === SEARCH BAR — ချုံ့ === */
+.video-search-wrap {
+    margin-bottom: 8px !important;
+}
+
+.video-search-wrap input {
+    padding: 10px 40px 10px 38px !important;
+    font-size: 11px !important;
+    border-radius: 14px !important;
+}
+
+.video-search-wrap .vs-icon {
+    left: 12px !important;
+    font-size: 12px !important;
+}
+
+.video-search-wrap .vs-btn {
+    width: 30px !important;
+    height: 30px !important;
+    right: 4px !important;
+    font-size: 11px !important;
+}
+
+/* === CATEGORY PILLS — ချုံ့ === */
+.video-pills-scroll {
+    gap: 5px !important;
+    padding: 2px 0 6px !important;
+    margin-bottom: 6px !important;
+}
+
+.video-pill {
+    padding: 5px 10px !important;
+    font-size: 9px !important;
+    gap: 4px !important;
+}
+
+.video-pill i {
+    font-size: 10px !important;
+}
+
+/* === VIDEO LIST HEADER — ချုံ့ === */
+.video-list-header h4 {
+    font-size: 11px !important;
+}
+
+.video-list-header .v-count {
+    font-size: 8px !important;
+    padding: 2px 8px !important;
+}
+
+/* === QUICK ACTIONS — ချုံ့ === */
+.quick-pill {
+    padding: 8px 4px !important;
+    gap: 5px !important;
+}
+
+.qp-icon {
+    width: 32px !important;
+    height: 32px !important;
+    font-size: 13px !important;
+    border-radius: 10px !important;
+}
+
+.qp-label {
+    font-size: 8.5px !important;
+}
+
+/* === BALANCE CARD — ချုံ့ === */
+.balance-card {
+    padding: 16px !important;
+    min-height: 140px !important;
+    border-radius: 22px !important;
+}
+
+.balance-value {
+    font-size: 32px !important;
+}
+
+.balance-coin {
+    font-size: 18px !important;
+}
+
+/* === BONUS TILE — ချုံ့ === */
+.bonus-tile {
+    padding: 12px !important;
+    border-radius: 18px !important;
+}
+
+.bonus-emoji {
+    width: 44px !important;
+    height: 44px !important;
+    font-size: 24px !important;
+    border-radius: 14px !important;
+}
+
+.bonus-tile-title {
+    font-size: 12px !important;
+}
+
+.bonus-tile-desc {
+    font-size: 9.5px !important;
+}
+
+.bonus-claim-btn {
+    padding: 8px 14px !important;
+    font-size: 12px !important;
+}
+
+/* === LEVEL TILE — ချုံ့ === */
+.level-tile {
+    padding: 12px !important;
+    border-radius: 20px !important;
+    gap: 12px !important;
+}
+
+.level-badge-circle {
+    width: 56px !important;
+    height: 56px !important;
+    border-radius: 18px !important;
+}
+
+.level-badge-circle span {
+    font-size: 20px !important;
+}
+
+.level-tile-title {
+    font-size: 14px !important;
+}
+
+.level-tile-desc {
+    font-size: 9.5px !important;
+}
+
+/* === DASHBOARD — ချုံ့ === */
+.dash-tile {
+    padding: 10px !important;
+    border-radius: 20px !important;
+}
+
+.dash-top-tile {
+    padding: 12px !important;
+    border-radius: 16px !important;
+}
+
+/* === TOP MENU BAR — ချုံ့ === */
+.top-menu-bar {
+    height: 54px !important;
+    padding: 8px 12px !important;
+    margin: 8px 10px 0 !important;
+    border-radius: 18px !important;
+}
+
+.menu-btn, .menu-action-btn {
+    width: 38px !important;
+    height: 38px !important;
+    font-size: 14px !important;
+    border-radius: 12px !important;
+}
+
+.menu-brand-icon {
+    width: 30px !important;
+    height: 30px !important;
+    font-size: 17px !important;
+    border-radius: 9px !important;
+}
+
+.menu-brand-text {
+    font-size: 13px !important;
+}
+
+/* === BOTTOM DOCK — ချုံ့ === */
+.orbit-bottom-dock {
+    height: 62px !important;
+    padding: 6px 8px !important;
+    border-radius: 22px !important;
+    width: calc(100% - 16px) !important;
+}
+
+.orbit-nav {
+    font-size: 7px !important;
+    height: 46px !important;
+}
+
+.orbit-icon {
+    width: 28px !important;
+    height: 28px !important;
+    font-size: 11px !important;
+}
+
+.orbit-home {
+    width: 50px !important;
+    height: 50px !important;
+    font-size: 17px !important;
+    border-radius: 17px !important;
+}
+
+/* === ADSTERRA BANNER — ချုံ့ === */
+.adsterra-banner {
+    margin: 14px 10px !important;
+    padding: 8px !important;
+    border-radius: 14px !important;
+}
+
+/* === FLOATING PLAY BTN — ချုံ့ === */
+.floating-play-btn {
+    width: 50px !important;
+    height: 50px !important;
+    font-size: 18px !important;
+    bottom: 80px !important;
+    right: 14px !important;
+}
+
+/* === SMALL PHONES — ထပ်ချုံ့ === */
+@media (max-width: 400px) {
+    .section-block {
+        margin: 8px 8px 0 !important;
+        padding: 10px !important;
+    }
+    
+    .v-title {
+        font-size: 8.5px !important;
+        min-height: 26px !important;
+    }
+    
+    .v-channel {
+        font-size: 6.5px !important;
+    }
+    
+    .ad-card {
+        height: 120px !important;
+        padding: 8px !important;
+    }
+    
+    .ad-icon {
+        font-size: 22px !important;
+        width: 30px !important;
+        height: 30px !important;
+    }
+    
+    .cinema-wrap {
+        height: 160px !important;
+        max-height: 160px !important;
+    }
+    
+    .series-episodes {
+        grid-template-columns: repeat(auto-fill, minmax(65px, 1fr)) !important;
+    }
+}
+
+/* === TABLET — 3 ကဒ် === */
+@media (min-width: 720px) {
+    .v-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+        gap: 10px !important;
+    }
+    
+    .ad-scroll {
+        grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    }
+    
+    .cinema-wrap {
+        height: 240px !important;
+        max-height: 240px !important;
+    }
+}
+</style>
 </style>
 
 </head>
@@ -4655,7 +5375,69 @@ background: linear-gradient(
                 </div>
             </div>
         </section>
+<!-- ============================================ -->
+<!-- 🎬 VIDEO TASKS -->
+<!-- ============================================ -->
+<section class="section-block" id="videosSection">
+    <div class="section-header-row">
+        <div class="section-title-block">
+            <i class="fas fa-video"></i> Video Tasks
+        </div>
+    </div>
 
+    <!-- Search -->
+    <div class="video-search-wrap">
+        <i class="fas fa-search vs-icon"></i>
+        <input type="text" id="videoSearchInput" placeholder="YouTube မှာ ရှာရန်..." />
+        <button class="vs-btn" onclick="searchYouTube()">
+            <i class="fas fa-arrow-right"></i>
+        </button>
+    </div>
+
+    <!-- Cinema Player -->
+    <div class="cinema-wrap">
+        <div id="player"></div>
+        <div class="video-error" id="videoError">
+            <i class="fas fa-play-circle"></i>
+            <span>ဗီဒီယိုမရှိပါ</span>
+        </div>
+        <div class="watch-timer" id="watchTimer">
+            <i class="fas fa-clock"></i>
+            <span id="watchTimerText">0s / 120s</span>
+        </div>
+        <button class="video-claim-popup" id="videoClaimPopup" onclick="claimVideoCoin()">
+            <i class="fas fa-coins"></i> Claim +<span id="videoClaimAmount">30</span>
+        </button>
+    </div>
+
+    <!-- Category Pills -->
+    <div class="video-pills-scroll">
+        <div class="video-pill active" onclick="switchVideoCategory('rss', this)">
+            <i class="fas fa-satellite-dish"></i><span>Movies</span>
+        </div>
+        <div class="video-pill" onclick="switchVideoCategory('myvideo', this)">
+            <i class="fas fa-clapperboard"></i><span>My Video</span>
+        </div>
+        <div class="video-pill" onclick="switchVideoCategory('song', this)">
+            <i class="fas fa-music"></i><span>Song</span>
+        </div>
+        <div class="video-pill" onclick="switchVideoCategory('cartoon', this)">
+            <i class="fas fa-face-smile"></i><span>Cartoon</span>
+        </div>
+        <div class="video-pill" onclick="switchVideoCategory('search', this)">
+            <i class="fas fa-magnifying-glass"></i><span>Search</span>
+        </div>
+    </div>
+
+    <!-- Video List Header -->
+    <div class="video-list-header" style="display:flex;justify-content:space-between;margin-bottom:10px;">
+        <h4 id="videoListTitle" style="font-size:13px;font-weight:800;color:#fff;">🎬 Movies</h4>
+        <span class="v-count" id="videoListCount" style="font-size:10px;color:#aaa4bd;background:rgba(255,255,255,.05);padding:4px 12px;border-radius:999px;">0</span>
+    </div>
+    
+    <!-- Video Grid -->
+    <div id="videoGrid" class="v-grid"></div>
+</section>
         <!-- ============================================ -->
         <!-- QUICK ACTIONS - Horizontal Scroll -->
         <!-- ============================================ -->
@@ -7175,6 +7957,619 @@ updateUI();
 renderAdCards();
 updateDailyBonusUI();
 applyLanguage();
+// ============================================================
+//  🎬 VIDEO TASKS — YouTube + RSS + Coin System
+// ============================================================
+
+const YOUTUBE_API_KEY = 'AIzaSyBmr5WXG46FsqDSSTax8Z9rlnlpQh4oyzI'; // 👈 သင့် key
+const VIDEO_REWARD = 30;
+const TARGET_WATCH = 120; // 2 minutes
+const RSS_CACHE_TIME = 30 * 60 * 1000;
+
+const RSS_CHANNELS = [
+    { id: 'UCNHIxx5X9XND2BMZ4LV73Fg', name: 'Heart & Soul', emoji: '🎬', category: 'movies' },
+    { id: 'UCZpd3IpUl7c7vLYIIiWzoOA', name: 'Drama Recap', emoji: '📺', category: 'drama' },
+    { id: 'UCgsfh9NxpBbzmfdV6wzgFA', name: 'Mg Kyaw AI', emoji: '🤖', category: 'ai' },
+    { id: 'UCaL6FKyJ75fAKANYL2P7t_g', name: 'Mahar Ent', emoji: '🎥', category: 'movies' },
+    { id: 'UC1ghHlhem7676hJfsyoON5Q', name: 'Barbie Myanmar', emoji: '💃', category: 'fun' },
+    { id: 'UCesiu2rvAlopyNVzEK4RFMA', name: 'SEIN HTAY', emoji: '🎞️', category: 'movies' },
+    { id: 'UCniPIti4QwaOEorvIqv1RWA', name: 'Anne Bryan', emoji: '🌸', category: 'fun' },
+    { id: 'UCj10WX_WHpZIpN6br_g-h1w', name: 'Pyone Play Sports', emoji: '⚽', category: 'sports' }
+];
+
+const CORS_PROXIES = [
+    'https://api.allorigins.win/raw?url=',
+    'https://corsproxy.io/?',
+    'https://api.codetabs.com/v1/proxy?quest='
+];
+
+let allRSSVideos = [];
+let currentVideoCategory = 'rss';
+let ytPlayer = null;
+let currentVideoId = "";
+let ytPlayerReady = false;
+let videoWatchTime = 0;
+let videoWatchInterval = null;
+let isVideoAdShowing = false;
+let isVideoPlaying = false;
+let savedVideoTime = 0;
+
+// --- YouTube Player Init ---
+function initYTPlayer() {
+    if (ytPlayer && ytPlayer.loadVideoById) return;
+    if (typeof YT !== 'undefined' && YT.Player) {
+        ytPlayer = new YT.Player('player', {
+            height: '100%', width: '100%', videoId: '',
+            playerVars: { playsinline: 1, rel: 0, modestbranding: 1, enablejsapi: 1 },
+            events: {
+                onReady: () => {
+                    ytPlayerReady = true;
+                    const err = document.getElementById('videoError');
+                    if (err) err.style.display = 'none';
+                    resetVideoWatchTimer();
+                },
+                onStateChange: onYTPlayerStateChange,
+                onError: () => {
+                    const err = document.getElementById('videoError');
+                    if (err) err.style.display = 'block';
+                    resetVideoWatchTimer();
+                }
+            }
+        });
+    } else setTimeout(initYTPlayer, 500);
+}
+window.onYouTubeIframeAPIReady = function() { initYTPlayer(); };
+
+// --- YouTube API Script Loader ---
+(function loadYTApi() {
+    if (window.YT && window.YT.Player) { initYTPlayer(); return; }
+    if (!document.querySelector('script[src*="youtube.com/iframe_api"]')) {
+        const s = document.createElement('script');
+        s.src = 'https://www.youtube.com/iframe_api';
+        document.head.appendChild(s);
+    }
+})();
+
+function onYTPlayerStateChange(event) {
+    if (event.data === YT.PlayerState.PLAYING) {
+        isVideoPlaying = true;
+        if (isVideoAdShowing) { isVideoAdShowing = false; resetVideoWatchTimer(); }
+        if (!isVideoAdShowing && videoWatchTime < TARGET_WATCH) startVideoWatchTimer();
+    } else if (event.data === YT.PlayerState.PAUSED) {
+        isVideoPlaying = false;
+        if (videoWatchInterval) { clearInterval(videoWatchInterval); videoWatchInterval = null; }
+    } else if (event.data === YT.PlayerState.ENDED) {
+        isVideoPlaying = false;
+        if (videoWatchInterval) { clearInterval(videoWatchInterval); videoWatchInterval = null; }
+    }
+}
+
+function loadVideo(id) {
+    if (!id || id.length !== 11) return;
+    currentVideoId = id;
+    resetVideoWatchTimer();
+    const err = document.getElementById('videoError');
+    if (err) err.style.display = 'none';
+    const popup = document.getElementById('videoClaimPopup');
+    if (popup) popup.style.display = 'none';
+    isVideoAdShowing = false;
+    isVideoPlaying = false;
+    savedVideoTime = 0;
+    if (!ytPlayer || !ytPlayerReady) { initYTPlayer(); setTimeout(() => loadVideo(id), 800); return; }
+    if (ytPlayer.loadVideoById) {
+        ytPlayer.loadVideoById(id);
+        setTimeout(() => { if (ytPlayer.playVideo) ytPlayer.playVideo(); }, 800);
+    }
+    document.getElementById('videosSection').scrollIntoView({ behavior: 'smooth' });
+}
+
+// --- Watch Timer (2 min) ---
+function resetVideoWatchTimer() {
+    if (videoWatchInterval) { clearInterval(videoWatchInterval); videoWatchInterval = null; }
+    videoWatchTime = 0;
+    isVideoAdShowing = false;
+    isVideoPlaying = false;
+    const wt = document.getElementById('watchTimer');
+    const cp = document.getElementById('videoClaimPopup');
+    if (wt) wt.style.display = 'none';
+    if (cp) cp.style.display = 'none';
+    const wtt = document.getElementById('watchTimerText');
+    if (wtt) wtt.textContent = '0s / 120s';
+}
+function startVideoWatchTimer() {
+    if (videoWatchInterval) { clearInterval(videoWatchInterval); videoWatchInterval = null; }
+    if (isVideoAdShowing || videoWatchTime >= TARGET_WATCH) { if (videoWatchTime >= TARGET_WATCH) showVideoClaimPopup(); return; }
+    isVideoPlaying = true;
+    const wt = document.getElementById('watchTimer');
+    if (wt) wt.style.display = 'block';
+    updateVideoTimerDisplay();
+    videoWatchInterval = setInterval(() => {
+        if (isVideoAdShowing || !isVideoPlaying) return;
+        videoWatchTime++;
+        updateVideoTimerDisplay();
+        if (videoWatchTime >= TARGET_WATCH) {
+            clearInterval(videoWatchInterval);
+            videoWatchInterval = null;
+            if (ytPlayer && ytPlayer.pauseVideo) ytPlayer.pauseVideo();
+            isVideoPlaying = false;
+            showVideoClaimPopup();
+        }
+    }, 1000);
+}
+function updateVideoTimerDisplay() {
+    const el = document.getElementById('watchTimerText');
+    if (el) el.textContent = `${videoWatchTime}s / ${TARGET_WATCH}s`;
+}
+function showVideoClaimPopup() {
+    isVideoAdShowing = true;
+    isVideoPlaying = false;
+    if (videoWatchInterval) { clearInterval(videoWatchInterval); videoWatchInterval = null; }
+    const amtEl = document.getElementById('videoClaimAmount');
+    if (amtEl) amtEl.textContent = VIDEO_REWARD;
+    const popup = document.getElementById('videoClaimPopup');
+    if (popup) popup.style.display = 'block';
+    const wt = document.getElementById('watchTimer');
+    if (wt) wt.style.display = 'none';
+    if (navigator.vibrate) navigator.vibrate(100);
+}
+
+// --- Claim → Ad Page → Coin ---
+function claimVideoCoin() {
+    if (isUpdatingCoins) { showToast('⏳ Please wait...', 'warning'); return; }
+    if (!currentUser) { showToast('❌ Please login', 'error'); return; }
+    if (!adLinks || adLinks.length === 0) {
+        showToast('❌ No ad links configured', 'error');
+        const popup = document.getElementById('videoClaimPopup');
+        if (popup) popup.style.display = 'none';
+        isVideoAdShowing = false;
+        resetVideoWatchTimer();
+        if (ytPlayer && ytPlayer.playVideo) setTimeout(() => ytPlayer.playVideo(), 500);
+        return;
+    }
+    if (ytPlayer && typeof ytPlayer.getCurrentTime === 'function') {
+        try { savedVideoTime = ytPlayer.getCurrentTime(); } catch (e) { savedVideoTime = 0; }
+    }
+    if (ytPlayer && typeof ytPlayer.pauseVideo === 'function') {
+        try { ytPlayer.pauseVideo(); } catch (e) {}
+    }
+    const popup = document.getElementById('videoClaimPopup');
+    if (popup) popup.style.display = 'none';
+    const adUrl = adLinks[Math.floor(Math.random() * adLinks.length)];
+    try {
+        const p = window.open(adUrl, 'videoAdTab', 'width=500,height=700,scrollbars=yes,resizable=yes');
+        if (p) p.focus();
+        else showToast('⚠️ Popup blocked', 'warning');
+    } catch (e) {}
+    startVideoAdPage(VIDEO_REWARD);
+}
+
+function startVideoAdPage(reward) {
+    isVideoAdShowing = true;
+    const adPage = document.getElementById('adPage');
+    const mainContainer = document.getElementById('appContainer');
+    if (mainContainer) mainContainer.style.display = 'none';
+    if (adPage) adPage.classList.add('show');
+    const progressBar = document.getElementById('adPageProgress');
+    const timerEl = document.getElementById('adPageTimer');
+    const claimBtn = document.getElementById('adPageClaimBtn');
+    const iframe = document.getElementById('adPageIframe');
+    const loading = document.getElementById('adPageLoading');
+    if (loading) { loading.style.display = 'flex'; loading.innerHTML = '<i class="fas fa-spinner fa-spin"></i><p>Ad Loading...</p>'; }
+    if (progressBar) progressBar.style.width = '0%';
+    if (timerEl) timerEl.textContent = AD_DURATION;
+    if (claimBtn) {
+        claimBtn.disabled = true;
+        claimBtn.className = 'ad-page-claim-btn';
+        claimBtn.innerHTML = `⏳ ${AD_DURATION}s ပြည့်ရင် +${reward} Coin ရမည်...`;
+        claimBtn.onclick = null;
+    }
+    if (iframe) {
+        iframe.src = 'about:blank';
+        iframe.onload = () => setTimeout(() => { if (loading) loading.style.display = 'none'; }, 500);
+    }
+    let isClaimed = false;
+    const startTime = Date.now();
+    if (adPageInterval) clearInterval(adPageInterval);
+    adPageInterval = setInterval(() => {
+        const elapsed = Math.floor((Date.now() - startTime) / 1000);
+        const timeLeft = Math.max(AD_DURATION - elapsed, 0);
+        const progressPercent = Math.min((elapsed / AD_DURATION) * 100, 100);
+        if (progressBar) progressBar.style.width = progressPercent + '%';
+        if (timerEl) timerEl.textContent = timeLeft;
+        if (timeLeft <= 0) {
+            clearInterval(adPageInterval);
+            adPageInterval = null;
+            if (progressBar) progressBar.style.width = '100%';
+            if (claimBtn) {
+                claimBtn.disabled = false;
+                claimBtn.className = 'ad-page-claim-btn active';
+                claimBtn.innerHTML = `✅ Claim +${reward} Coins`;
+                claimBtn.onclick = function () {
+                    if (isClaimed) return;
+                    isClaimed = true;
+                    claimBtn.disabled = true;
+                    claimBtn.innerHTML = '⏳ Adding...';
+                    giveVideoReward(reward);
+                };
+            }
+            setTimeout(() => { if (!isClaimed) { isClaimed = true; giveVideoReward(reward); } }, 2000);
+        }
+    }, 250);
+}
+
+async function giveVideoReward(reward) {
+    if (!currentUser) { showToast('❌ Please login', 'error'); return; }
+    if (!acquireCoinLock()) { showToast('⏳ Please wait...', 'warning'); return; }
+    try {
+        const newCoins = (userData.coins || 0) + reward;
+        const newAds = (userData.totalAds || 0) + 1;
+        userData.coins = newCoins;
+        userData.totalAds = newAds;
+        saveCoinsToLocal(newCoins);
+        updateUI();
+        updateLevelUI();
+        updateAchievementsUI();
+        const pending = getPendingAdRewards();
+        pending.count += 1;
+        pending.coins += reward;
+        pending.lastTitle = 'Video Watch';
+        setPendingAdRewards(pending);
+        const flushed = await flushPendingAdRewards(false);
+        closeVideoAdPage();
+        showCoinAnimation(reward, newCoins);
+        showToast(`✅ +${reward} Coins (Video)!`, 'success');
+        if (flushed) loadDashboard();
+    } catch (error) {
+        showToast('❌ Failed', 'error');
+        closeVideoAdPage();
+    } finally {
+        setTimeout(() => releaseCoinLock(), 1500);
+    }
+}
+
+function closeVideoAdPage() {
+    if (adPageInterval) { clearInterval(adPageInterval); adPageInterval = null; }
+    const adPage = document.getElementById('adPage');
+    if (adPage) adPage.classList.remove('show');
+    const mainContainer = document.getElementById('appContainer');
+    if (mainContainer) mainContainer.style.display = 'flex';
+    isVideoAdShowing = false;
+    const progressBar = document.getElementById('adPageProgress');
+    if (progressBar) progressBar.style.width = '0%';
+    const timerEl = document.getElementById('adPageTimer');
+    if (timerEl) timerEl.textContent = AD_DURATION;
+    setTimeout(() => resumeVideoAfterAd(), 4200);
+}
+
+function resumeVideoAfterAd() {
+    isVideoAdShowing = false;
+    if (!ytPlayer || !ytPlayerReady) {
+        initYTPlayer();
+        setTimeout(() => {
+            if (ytPlayer && ytPlayer.loadVideoById && currentVideoId) {
+                ytPlayer.loadVideoById(currentVideoId);
+                setTimeout(() => { if (ytPlayer.playVideo) ytPlayer.playVideo(); resetVideoWatchTimer(); }, 500);
+            }
+        }, 1000);
+        return;
+    }
+    try {
+        if (savedVideoTime > 0 && ytPlayer.seekTo) {
+            ytPlayer.seekTo(savedVideoTime, true);
+            setTimeout(() => { if (ytPlayer.playVideo) ytPlayer.playVideo(); resetVideoWatchTimer(); }, 500);
+        } else if (currentVideoId && ytPlayer.loadVideoById) {
+            ytPlayer.loadVideoById(currentVideoId);
+            setTimeout(() => { if (ytPlayer.playVideo) ytPlayer.playVideo(); resetVideoWatchTimer(); }, 800);
+        } else if (ytPlayer.playVideo) {
+            ytPlayer.playVideo();
+            resetVideoWatchTimer();
+        }
+    } catch (e) {}
+}
+
+// --- YouTube Search ---
+async function searchYouTube() {
+    const query = document.getElementById('videoSearchInput').value.trim();
+    if (!query) { showToast('Enter search term', 'error'); return; }
+    let videoId = '';
+    if (query.includes('youtu.be/')) videoId = query.split('youtu.be/')[1].split('?')[0];
+    else if (query.includes('watch?v=')) videoId = query.split('watch?v=').pop().split('&')[0];
+    else if (query.includes('shorts/')) videoId = query.split('shorts/')[1].split('?')[0];
+    else if (query.length === 11 && /^[a-zA-Z0-9_-]+$/.test(query)) videoId = query;
+    if (videoId && videoId.length === 11) { loadVideo(videoId); document.getElementById('videoSearchInput').value = ''; return; }
+
+    const container = document.getElementById('videoGrid');
+    const title = document.getElementById('videoListTitle');
+    const count = document.getElementById('videoListCount');
+    title.textContent = '🔍 Searching...';
+    count.textContent = '...';
+    container.innerHTML = `<div class="video-loading"><i class="fas fa-spinner"></i><p>Searching "${query}"...</p></div>`;
+    try {
+        const response = await fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=20&q=${encodeURIComponent(query)}&type=video&key=${YOUTUBE_API_KEY}`);
+        if (!response.ok) throw new Error('API error');
+        const data = await response.json();
+        if (data.items && data.items.length > 0) {
+            const results = data.items.map(item => ({
+                name: item.snippet.title, id: item.id.videoId,
+                thumbnail: item.snippet.thumbnails.medium.url,
+                channelName: item.snippet.channelTitle, channelEmoji: '🔍',
+                published: item.snippet.publishedAt, views: 0
+            }));
+            title.textContent = `🔍 Results (${results.length})`;
+            count.textContent = results.length;
+            container.innerHTML = '';
+            results.forEach((item, i) => container.appendChild(createVideoCard(item, i)));
+        } else {
+            container.innerHTML = `<div class="video-no-results"><i class="fas fa-search"></i><p>No results</p></div>`;
+            count.textContent = '0';
+        }
+    } catch (error) {
+        container.innerHTML = `<div class="video-no-results"><i class="fas fa-exclamation-circle"></i><p>Search failed</p></div>`;
+        count.textContent = '0';
+    }
+}
+
+// --- RSS Fetch ---
+async function fetchChannelRSS(channelId) {
+    const cacheKey = `rss_cache_${channelId}`;
+    let cached = null;
+    try {
+        const c = localStorage.getItem(cacheKey);
+        if (c) { cached = JSON.parse(c); if (Date.now() - cached.timestamp < RSS_CACHE_TIME) return cached.data; }
+    } catch (e) {}
+    const rssUrl = `https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`;
+    for (const proxy of CORS_PROXIES) {
+        try {
+            const response = await fetch(proxy + encodeURIComponent(rssUrl));
+            if (!response.ok) continue;
+            const xmlText = await response.text();
+            if (!xmlText.includes('<entry>')) continue;
+            const parser = new DOMParser();
+            const xmlDoc = parser.parseFromString(xmlText, 'text/xml');
+            const entries = xmlDoc.querySelectorAll('entry');
+            const videos = [];
+            entries.forEach(entry => {
+                const videoId = entry.getElementsByTagName('yt:videoId')[0]?.textContent;
+                const title = entry.getElementsByTagName('title')[0]?.textContent;
+                const published = entry.getElementsByTagName('published')[0]?.textContent;
+                const thumbnail = entry.getElementsByTagName('media:thumbnail')[0]?.getAttribute('url');
+                const stats = entry.getElementsByTagName('media:statistics')[0];
+                const views = stats ? parseInt(stats.getAttribute('views')) : 0;
+                if (videoId && title) videos.push({
+                    id: videoId, name: title, published, views,
+                    thumbnail: thumbnail || `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`
+                });
+            });
+            if (videos.length > 0) {
+                try { localStorage.setItem(cacheKey, JSON.stringify({ data: videos, timestamp: Date.now() })); } catch (e) {}
+                return videos;
+            }
+        } catch (error) { continue; }
+    }
+    if (cached) return cached.data;
+    return [];
+}
+
+async function loadRSSVideos() {
+    const container = document.getElementById('videoGrid');
+    const title = document.getElementById('videoListTitle');
+    const count = document.getElementById('videoListCount');
+    container.innerHTML = `<div class="video-loading"><i class="fas fa-satellite-dish"></i><p>Channel ၈ ခုကနေ Video တွေ ရယူနေပါသည်...</p></div>`;
+    title.textContent = '🎬 Movies';
+    count.textContent = '...';
+    try {
+        const results = await Promise.all(RSS_CHANNELS.map(channel => fetchChannelRSS(channel.id)));
+        const allVideos = [];
+        results.forEach((videos, i) => {
+            const channel = RSS_CHANNELS[i];
+            videos.forEach(v => allVideos.push({
+                ...v, channelId: channel.id, channelName: channel.name,
+                channelEmoji: channel.emoji, channelCategory: channel.category
+            }));
+        });
+        allRSSVideos = allVideos.sort((a, b) => new Date(b.published) - new Date(a.published));
+        renderFilteredVideos(allRSSVideos);
+    } catch (error) {
+        container.innerHTML = `<div class="video-no-results"><i class="fas fa-exclamation-circle"></i><p>Video တွေ ရယူမရပါ</p></div>`;
+    }
+}
+
+// --- Series Detection ---
+function myanmarToNumber(str) {
+    if (!str) return 0;
+    const map = { '၀':0,'၁':1,'၂':2,'၃':3,'၄':4,'၅':5,'၆':6,'၇':7,'၈':8,'၉':9 };
+    let num = '';
+    for (const ch of str) num += map[ch] !== undefined ? map[ch] : ch;
+    return parseInt(num) || 0;
+}
+function detectSeries(videos) {
+    const patterns = [
+        /\(အပိုင်း\s*([၁၂၃၄၅၆၇၈၉၀\d]+)\)/i,
+        /အပိုင်း\s*([၁၂၃၄၅၆၇၈၉၀\d]+)/i,
+        /(part|episode|ep)\s*([\d၁၂၃၄၅၆၇၈၉၀]+)/i,
+        /\(([၁၂၃၄၅၆၇၈၉၀\d])\)/
+    ];
+    const seriesMap = {};
+    const standalone = [];
+    videos.forEach(video => {
+        let matched = false, baseTitle = '', episodeNum = '';
+        for (const pattern of patterns) {
+            const match = video.name.match(pattern);
+            if (match) {
+                episodeNum = match[1] || match[2];
+                baseTitle = video.name.replace(/\(အပိုင်း\s*[၁၂၃၄၅၆၇၈၉၀\d]+\)/gi,'')
+                    .replace(/အပိုင်း\s*[၁၂၃၄၅၆၇၈၉၀\d]+/gi,'')
+                    .replace(/[\s\-–—_]+$/,'').trim();
+                matched = true; break;
+            }
+        }
+        if (matched && baseTitle.length > 5) {
+            const key = baseTitle.toLowerCase().substring(0, 40);
+            if (!seriesMap[key]) seriesMap[key] = { baseTitle, videos: [] };
+            seriesMap[key].videos.push({ ...video, episodeNum });
+        } else standalone.push(video);
+    });
+    const series = [];
+    const remainingStandalone = [...standalone];
+    Object.values(seriesMap).forEach(s => {
+        if (s.videos.length >= 2) {
+            s.videos.sort((a, b) => myanmarToNumber(a.episodeNum) - myanmarToNumber(b.episodeNum));
+            series.push(s);
+        } else s.videos.forEach(v => remainingStandalone.push(v));
+    });
+    return { series, standalone: remainingStandalone };
+}
+
+function renderFilteredVideos(videos) {
+    const container = document.getElementById('videoGrid');
+    const title = document.getElementById('videoListTitle');
+    const count = document.getElementById('videoListCount');
+    count.textContent = videos.length;
+    title.textContent = `🎬 Movies (${videos.length})`;
+    if (videos.length === 0) {
+        container.innerHTML = `<div class="video-no-results"><i class="fas fa-search"></i><p>Video မတွေ့ပါ</p></div>`;
+        return;
+    }
+    const { series, standalone } = detectSeries(videos);
+    container.innerHTML = '';
+    series.forEach(s => {
+        const group = document.createElement('div');
+        group.className = 'series-group';
+        let episodesHtml = '';
+        s.videos.forEach(video => {
+            const epNum = video.episodeNum || '?';
+            episodesHtml += `
+                <div class="series-episode" onclick="event.stopPropagation(); loadVideo('${video.id}')">
+                    <div class="ep-number">${epNum}</div>
+                    <img class="ep-thumb" src="${video.thumbnail}" loading="lazy" />
+                    <div class="ep-title">အပိုင်း ${epNum}</div>
+                </div>`;
+        });
+        const firstVideo = s.videos[0];
+        group.innerHTML = `
+            <div class="series-header">
+                <div class="series-title-wrap">
+                    <span class="series-icon">🎬</span>
+                    <div class="series-info">
+                        <div class="series-name">${s.baseTitle}</div>
+                        <div class="series-meta">
+                            <span>${firstVideo.channelEmoji} ${firstVideo.channelName}</span>
+                            <span class="series-episodes-count">${s.videos.length} parts</span>
+                        </div>
+                    </div>
+                </div>
+                <button class="series-play-all-btn" onclick="event.stopPropagation(); loadVideo('${firstVideo.id}')">
+                    <i class="fas fa-play"></i> Play All
+                </button>
+            </div>
+            <div class="series-episodes">${episodesHtml}</div>`;
+        container.appendChild(group);
+    });
+    standalone.forEach((item, index) => container.appendChild(createVideoCard(item, index)));
+}
+
+function createVideoCard(item, index) {
+    const card = document.createElement('div');
+    card.className = 'v-card';
+    const pubDate = new Date(item.published);
+    const daysAgo = Math.floor((Date.now() - pubDate) / (1000 * 60 * 60 * 24));
+    let timeAgo = daysAgo === 0 ? 'Today' : daysAgo === 1 ? 'Yesterday' :
+        daysAgo < 7 ? daysAgo + 'd ago' : daysAgo < 30 ? Math.floor(daysAgo/7) + 'w ago' :
+        daysAgo < 365 ? Math.floor(daysAgo/30) + 'mo ago' : Math.floor(daysAgo/365) + 'y ago';
+    card.innerHTML = `
+        <div class="v-thumb">
+            <img src="${item.thumbnail}" loading="lazy" />
+            <div class="play-overlay"><div class="play-icon"><i class="fas fa-play"></i></div></div>
+            <div class="time-ago">${timeAgo}</div>
+        </div>
+        <div class="v-title">${item.name}</div>
+        <div class="v-channel">${item.channelEmoji || '📁'} ${item.channelName || 'Local'}</div>`;
+    card.onclick = () => loadVideo(item.id);
+    return card;
+}
+
+// --- Category Switch ---
+const defaultSongList = [
+    { name: "သီချင်း 1 - တို့ဗမာ", id: "EnpWs20HZiY" },
+    { name: "သီချင်း 2 - ရင်ခုန်သံ", id: "H0GOhtVdC3Y" }
+];
+const defaultVideoList = [{ name: "ဗီဒီယို 1", id: "I54Chzm_YUY" }];
+const defaultCartoonList = [{ name: "ကာတွန်း 1", id: "EnpWs20HZiY" }];
+
+function getVideosFromLocal(category) {
+    const stored = localStorage.getItem('videos_' + category);
+    if (stored) { try { return JSON.parse(stored); } catch (e) {} }
+    if (category === 'song') return defaultSongList;
+    if (category === 'video') return defaultVideoList;
+    if (category === 'cartoon') return defaultCartoonList;
+    return [];
+}
+
+function switchVideoCategory(category, el) {
+    currentVideoCategory = category;
+    document.querySelectorAll('.video-pill').forEach(e => e.classList.remove('active'));
+    if (el) el.classList.add('active');
+    resetVideoWatchTimer();
+    isVideoAdShowing = false;
+    isVideoPlaying = false;
+    if (category === 'rss') loadRSSVideos();
+    else if (category === 'search') {
+        const container = document.getElementById('videoGrid');
+        document.getElementById('videoListTitle').textContent = '🔍 Search';
+        document.getElementById('videoListCount').textContent = '0';
+        container.innerHTML = `<div class="video-no-results"><i class="fas fa-search"></i><p>အပေါ်မှာ ရှာပါ</p></div>`;
+    } else renderLocalVideos(category);
+}
+
+function renderLocalVideos(category) {
+    const container = document.getElementById('videoGrid');
+    const title = document.getElementById('videoListTitle');
+    const count = document.getElementById('videoListCount');
+    container.innerHTML = '';
+    let list = getVideosFromLocal(category);
+    title.textContent = category === 'myvideo' ? '📽️ My Videos' :
+                        category === 'song' ? '🎵 Songs' :
+                        category === 'video' ? '🎬 Videos' : '🎨 Cartoons';
+    if (!list || list.length === 0) {
+        container.innerHTML = `<div class="video-no-results"><i class="fas fa-video-slash"></i><p>Video မရှိသေးပါ</p></div>`;
+        count.textContent = '0';
+        return;
+    }
+    count.textContent = list.length;
+    list.forEach((item, index) => {
+        const card = document.createElement('div');
+        card.className = 'v-card';
+        card.innerHTML = `
+            <div class="v-thumb">
+                <img src="https://img.youtube.com/vi/${item.id}/hqdefault.jpg" loading="lazy" />
+                <div class="play-overlay"><div class="play-icon"><i class="fas fa-play"></i></div></div>
+            </div>
+            <div class="v-title">${item.name}</div>
+            <div class="v-channel">📁 Local</div>`;
+        card.onclick = () => { if (item.id && item.id.length === 11) loadVideo(item.id); };
+        container.appendChild(card);
+    });
+}
+
+// --- Init ---
+if (document.readyState === 'complete' || document.readyState === 'interactive') {
+    initYTPlayer();
+}
+// Lazy load RSS videos when user scrolls to videos section
+const _videoSectionObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+        if (entry.isIntersecting && allRSSVideos.length === 0 && currentVideoCategory === 'rss') {
+            loadRSSVideos();
+            _videoSectionObserver.disconnect();
+        }
+    });
+}, { threshold: 0.1 });
+setTimeout(() => {
+    const vs = document.getElementById('videosSection');
+    if (vs) _videoSectionObserver.observe(vs);
+}, 1000);
+
+console.log('✅ Video Tasks loaded');
 console.log('✅ CASH TUBE Rewards - Orbit Neon UI Loaded');
     </script>
 </body>
