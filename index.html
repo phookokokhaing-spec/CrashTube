@@ -1661,19 +1661,14 @@ body {
     transition: width 0.3s;
 }
 
-#adPage .ad-page-iframe-wrap {
+#adPage .ad-page-direct-wrap {
     flex: 1;
     position: relative;
     overflow: hidden;
-    background: #fff;
-}
-
-#adPage #adPageIframe {
-    width: 100%;
-    height: 100%;
-    border: none;
-    display: block;
-    background: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-main);
 }
 
 #adPage .ad-page-loading {
@@ -4128,8 +4123,7 @@ body{
   color:#fff!important;
   box-shadow:0 8px 22px rgba(124,58,237,.28);
 }
-#adPage .ad-page-iframe-wrap,
-#adPage #adPageIframe{background:#0b0e22!important;}
+
 /* Shared surfaces */
 .card,.panel,.section-card,.stat-card,.quick-card,.dashboard-card,
 .ad-card,.bonus-card,.level-card,.market-card,.profile-card,
@@ -5630,11 +5624,10 @@ background: linear-gradient(
         <div class="ad-page-progress-bg">
             <div class="ad-page-progress-fill" id="adPageProgress"></div>
         </div>
-        <div class="ad-page-iframe-wrap">
-            <iframe id="adPageIframe" src="about:blank" allow="autoplay; encrypted-media" referrerpolicy="no-referrer"></iframe>
+        <div class="ad-page-direct-wrap">
             <div class="ad-page-loading" id="adPageLoading">
-                <i class="fas fa-spinner fa-spin"></i>
-                <p>Ad Loading...</p>
+                <i class="fas fa-external-link-alt"></i>
+                <p>Ad website ကို Browser မှာ ဖွင့်ထားပါတယ်</p>
             </div>
         </div>
         <div class="ad-page-footer">
@@ -6857,6 +6850,16 @@ function startAdTask(cardId) {
     if (!adUrl) { showToast('❌ Link မရှိ', 'error'); return; }
     if (!adUrl.startsWith('http')) adUrl = 'https://' + adUrl;
 
+    // Open the ad website directly in a new browser tab/window.
+    // No iframe is used, so ad networks can load normally without iframe restrictions.
+    let adWindow = null;
+    try { adWindow = window.open(adUrl, '_blank'); } catch (e) {}
+    if (!adWindow) {
+        showToast('⚠️ Browser က Ad ဖွင့်ခွင့်ပိတ်ထားပါတယ်။ Allow pop-ups လုပ်ပြီး ပြန်နှိပ်ပါ။', 'warning');
+        return;
+    }
+    try { adWindow.focus(); } catch (e) {}
+
     currentAdCard = card;
     isAdPlaying = true;
 
@@ -6865,25 +6868,21 @@ function startAdTask(cardId) {
     if (mainContainer) mainContainer.style.display = 'none';
     if (adPage) adPage.classList.add('show');
 
-    const iframe = document.getElementById('adPageIframe');
     const loading = document.getElementById('adPageLoading');
     const progressBar = document.getElementById('adPageProgress');
     const timerEl = document.getElementById('adPageTimer');
     const claimBtn = document.getElementById('adPageClaimBtn');
 
-    if (loading) { loading.style.display = 'flex'; loading.innerHTML = '<i class="fas fa-spinner fa-spin"></i><p>Ad Loading...</p>'; }
+    if (loading) {
+        loading.style.display = 'flex';
+        loading.innerHTML = '<i class="fas fa-external-link-alt"></i><p>Ad website ကို Browser မှာ ဖွင့်ထားပါတယ်</p>';
+    }
     if (progressBar) progressBar.style.width = '0%';
     if (timerEl) timerEl.textContent = AD_DURATION;
-    if (claimBtn) { claimBtn.disabled = true; claimBtn.className = 'ad-page-claim-btn'; claimBtn.innerHTML = `⏳ ${AD_DURATION}s ပြည့်ရင် Coin ရမည်...`; }
-
-    if (iframe) {
-        iframe.src = adUrl;
-        iframe.onload = () => setTimeout(() => { if (loading) loading.style.display = 'none'; }, 800);
-        setTimeout(() => {
-            if (loading && loading.style.display !== 'none') {
-                loading.innerHTML = '<i class="fas fa-exclamation-circle" style="color:var(--blue-500);"></i><p>Ad loading ကြာနေပါသည်...</p>';
-            }
-        }, 5000);
+    if (claimBtn) {
+        claimBtn.disabled = true;
+        claimBtn.className = 'ad-page-claim-btn';
+        claimBtn.innerHTML = `⏳ ${AD_DURATION}s ပြည့်ရင် Coin ရမည်...`;
     }
 
     let isClaimed = false;
@@ -6899,10 +6898,22 @@ function startAdTask(cardId) {
 
         if (timeLeft <= 0) {
             clearInterval(adPageInterval);
+            adPageInterval = null;
             if (progressBar) progressBar.style.width = '100%';
+            if (loading) loading.style.display = 'none';
+
             if (card.type === 'watch') {
-                if (claimBtn) { claimBtn.disabled = false; claimBtn.className = 'ad-page-claim-btn active'; claimBtn.innerHTML = `✅ +${card.reward} Coins...`; }
-                setTimeout(() => { if (!isClaimed) { isClaimed = true; claimAdReward(); } }, 500);
+                if (claimBtn) {
+                    claimBtn.disabled = false;
+                    claimBtn.className = 'ad-page-claim-btn active';
+                    claimBtn.innerHTML = `✅ +${card.reward} Coins`;
+                }
+                setTimeout(() => {
+                    if (!isClaimed) {
+                        isClaimed = true;
+                        claimAdReward();
+                    }
+                }, 500);
             } else {
                 if (claimBtn) {
                     claimBtn.disabled = false;
@@ -6923,8 +6934,6 @@ function startAdTask(cardId) {
 
 function closeAdPageAndReturn() {
     if (adPageInterval) { clearInterval(adPageInterval); adPageInterval = null; }
-    const iframe = document.getElementById('adPageIframe');
-    if (iframe) iframe.src = 'about:blank';
     const adPage = document.getElementById('adPage');
     if (adPage) adPage.classList.remove('show');
     const mainContainer = document.getElementById('appContainer');
@@ -7137,8 +7146,9 @@ async function claimDailyBonus() {
 //  UI UPDATE
 // ============================================================
 function updateUI() {
-    const localCoins = getCoinsFromLocal();
-    if (localCoins !== null && !isUpdatingCoins) userData.coins = localCoins;
+    // Firestore is the authoritative coin balance.
+    // Do NOT overwrite it from localStorage: a stale local value can make
+    // the balance appear to decrease after an exchange/reward update.
     const coins = userData.coins || 0;
     const usdt = userData.usdt || 0;
     const username = userData.username || 'User';
@@ -7292,21 +7302,73 @@ function calculateExchange() {
     result.style.color = 'var(--mint-600)';
 }
 async function confirmExchange() {
+    if (!currentUser) { showToast('❌ Please login', 'error'); return; }
     if (!isExchangeOpen) { showToast('🔒 ပိတ်ထားသည်', 'error'); return; }
-    const amt = parseInt(document.getElementById('exchangeInput').value) || 0;
-    if (amt <= 0 || amt > (userData.coins || 0)) { showToast('Invalid', 'error'); return; }
-    const usdt = amt / exchangeRate;
-    if (!confirm(`${amt} Coins → $${usdt.toFixed(2)}?`)) return;
-    userData.coins -= amt;
-    userData.usdt += usdt;
-    saveCoinsToLocal(userData.coins);
-    updateUI();
+    if (!acquireCoinLock()) { showToast('⏳ Please wait...', 'warning'); return; }
+
     try {
-        await db.collection('users').doc(currentUser.uid).update({ coins: firebase.firestore.FieldValue.increment(-amt), usdt: firebase.firestore.FieldValue.increment(usdt) });
-        await db.collection('transactions').add({ userId: currentUser.uid, type: 'exchange', amount: -amt, description: `${amt} Coins → $${usdt.toFixed(2)} USDT`, timestamp: firebase.firestore.FieldValue.serverTimestamp() });
-    } catch (e) {}
-    showToast(`✅ $${usdt.toFixed(2)}`);
-    closeModal('exchangeModal');
+        const amt = parseInt(document.getElementById('exchangeInput').value) || 0;
+        if (amt <= 0) { showToast('Invalid', 'error'); return; }
+
+        // Use the latest Firestore balance for the check. This prevents a
+        // stale local balance or a double-click from creating bad deductions.
+        const exchangeUsdt = amt / exchangeRate;
+        if (!confirm(`${amt} Coins → $${exchangeUsdt.toFixed(2)}?`)) return;
+
+        const userRef = db.collection('users').doc(currentUser.uid);
+        const result = await db.runTransaction(async (tx) => {
+            const snap = await tx.get(userRef);
+            if (!snap.exists) throw new Error('USER_NOT_FOUND');
+
+            const data = snap.data() || {};
+            const serverCoins = Math.max(0, Number(data.coins) || 0);
+            const serverUsdt = Math.max(0, Number(data.usdt) || 0);
+
+            if (serverCoins < amt) throw new Error('INSUFFICIENT_COINS');
+
+            const newCoins = serverCoins - amt;
+            const newUsdt = serverUsdt + exchangeUsdt;
+
+            tx.update(userRef, {
+                coins: newCoins,
+                usdt: newUsdt
+            });
+
+            return { coins: newCoins, usdt: newUsdt };
+        });
+
+        // Only update local UI/storage AFTER Firestore succeeds.
+        userData.coins = result.coins;
+        userData.usdt = result.usdt;
+        saveCoinsToLocal(result.coins);
+        updateUI();
+
+        // Transaction history is separate from the balance update. If this
+        // write fails, the coin exchange itself has already succeeded.
+        try {
+            await db.collection('transactions').add({
+                userId: currentUser.uid,
+                type: 'exchange',
+                amount: -amt,
+                description: `${amt} Coins → $${exchangeUsdt.toFixed(2)} USDT`,
+                timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            });
+        } catch (historyError) {}
+
+        showToast(`✅ $${exchangeUsdt.toFixed(2)}`);
+        closeModal('exchangeModal');
+    } catch (e) {
+        if (e.message === 'INSUFFICIENT_COINS') {
+            showToast('❌ Insufficient Coins', 'error');
+        } else if (e.message === 'USER_NOT_FOUND') {
+            showToast('❌ User data not found', 'error');
+        } else {
+            // Do not deduct locally when the server transaction fails.
+            showToast('❌ Exchange failed — Coins were not deducted', 'error');
+        }
+    } finally {
+        releaseCoinLock();
+    }
 }
 async function requestWithdraw() {
     if (!isWithdrawOpen) { showToast('❌ Locked', 'error'); return; }
@@ -7926,21 +7988,29 @@ async function sendCoinGift() {
         const snapshot = await db.collection('users').where('email', '==', receiverEmail).get();
         if (snapshot.empty) { msgEl.textContent = '❌ Not found'; msgEl.style.color = 'var(--rose-500)'; return; }
         const receiverDoc = snapshot.docs[0];
-        userData.coins -= totalCost;
-        saveCoinsToLocal(userData.coins);
-        updateUI();
-        await db.runTransaction(async (tx) => {
+        const transferResult = await db.runTransaction(async (tx) => {
             const sRef = db.collection('users').doc(currentUser.uid);
             const rRef = db.collection('users').doc(receiverDoc.id);
             const sDoc = await tx.get(sRef);
             const rDoc = await tx.get(rRef);
-            tx.update(sRef, { coins: (sDoc.data().coins || 0) - totalCost });
-            tx.update(rRef, { coins: (rDoc.data().coins || 0) + amount });
+            const senderCoins = Math.max(0, Number(sDoc.data()?.coins) || 0);
+            const receiverCoins = Math.max(0, Number(rDoc.data()?.coins) || 0);
+            if (senderCoins < totalCost) throw new Error('INSUFFICIENT_COINS');
+            const newSenderCoins = senderCoins - totalCost;
+            tx.update(sRef, { coins: newSenderCoins });
+            tx.update(rRef, { coins: receiverCoins + amount });
+            return newSenderCoins;
         });
+        userData.coins = transferResult;
+        saveCoinsToLocal(transferResult);
+        updateUI();
         msgEl.textContent = '✅ Sent';
         msgEl.style.color = 'var(--mint-600)';
         showToast('🎁 Sent!', 'success');
-    } catch (e) { msgEl.textContent = '❌ Failed'; msgEl.style.color = 'var(--rose-500)'; }
+    } catch (e) {
+        msgEl.textContent = e.message === 'INSUFFICIENT_COINS' ? '❌ Insufficient Coins' : '❌ Failed';
+        msgEl.style.color = 'var(--rose-500)';
+    }
 }
 
 // ============================================================
@@ -8152,7 +8222,6 @@ function startVideoAdPage(reward) {
     const progressBar = document.getElementById('adPageProgress');
     const timerEl = document.getElementById('adPageTimer');
     const claimBtn = document.getElementById('adPageClaimBtn');
-    const iframe = document.getElementById('adPageIframe');
     const loading = document.getElementById('adPageLoading');
     if (loading) { loading.style.display = 'flex'; loading.innerHTML = '<i class="fas fa-spinner fa-spin"></i><p>Ad Loading...</p>'; }
     if (progressBar) progressBar.style.width = '0%';
@@ -8162,10 +8231,6 @@ function startVideoAdPage(reward) {
         claimBtn.className = 'ad-page-claim-btn';
         claimBtn.innerHTML = `⏳ ${AD_DURATION}s ပြည့်ရင် +${reward} Coin ရမည်...`;
         claimBtn.onclick = null;
-    }
-    if (iframe) {
-        iframe.src = 'about:blank';
-        iframe.onload = () => setTimeout(() => { if (loading) loading.style.display = 'none'; }, 500);
     }
     let isClaimed = false;
     const startTime = Date.now();
