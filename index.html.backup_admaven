@@ -22,7 +22,7 @@
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
-     <script id="aclib" type="text/javascript" src="//acscdn.com/script/aclib.js"></script>
+
     <style>
 * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
@@ -5099,7 +5099,6 @@ background: linear-gradient(
 </style>
 </style>
 
-    <meta name='admaven-placement' content='BpdU8qHr6'>
 </head>
 <body>
 
@@ -5107,11 +5106,7 @@ background: linear-gradient(
     <!-- ADSTERRA POPUNDER -->
     <!-- ============================================================ -->
     <script src="https://pl31368986.profitableratecpmnetwork.com/be/4f/d7/be4fd7f0bacf7f63ff23f7f23ac39567.js"></script>
-     <script type="text/javascript">
-  aclib.runAutoTag({
-    zoneId: 'izhshwktf4',
-  });
-</script>
+
     <!-- ============================================================ -->
     <!-- SPLASH SCREEN - Orbit Neon -->
     <!-- ============================================================ -->
