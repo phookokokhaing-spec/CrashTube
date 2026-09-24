@@ -7137,8 +7137,9 @@ async function claimDailyBonus() {
 //  UI UPDATE
 // ============================================================
 function updateUI() {
-    const localCoins = getCoinsFromLocal();
-    if (localCoins !== null && !isUpdatingCoins) userData.coins = localCoins;
+    // Firestore is the authoritative coin balance.
+    // Do NOT overwrite it from localStorage: a stale local value can make
+    // the balance appear to decrease after an exchange/reward update.
     const coins = userData.coins || 0;
     const usdt = userData.usdt || 0;
     const username = userData.username || 'User';
@@ -7292,21 +7293,73 @@ function calculateExchange() {
     result.style.color = 'var(--mint-600)';
 }
 async function confirmExchange() {
+    if (!currentUser) { showToast('❌ Please login', 'error'); return; }
     if (!isExchangeOpen) { showToast('🔒 ပိတ်ထားသည်', 'error'); return; }
-    const amt = parseInt(document.getElementById('exchangeInput').value) || 0;
-    if (amt <= 0 || amt > (userData.coins || 0)) { showToast('Invalid', 'error'); return; }
-    const usdt = amt / exchangeRate;
-    if (!confirm(`${amt} Coins → $${usdt.toFixed(2)}?`)) return;
-    userData.coins -= amt;
-    userData.usdt += usdt;
-    saveCoinsToLocal(userData.coins);
-    updateUI();
+    if (!acquireCoinLock()) { showToast('⏳ Please wait...', 'warning'); return; }
+
     try {
-        await db.collection('users').doc(currentUser.uid).update({ coins: firebase.firestore.FieldValue.increment(-amt), usdt: firebase.firestore.FieldValue.increment(usdt) });
-        await db.collection('transactions').add({ userId: currentUser.uid, type: 'exchange', amount: -amt, description: `${amt} Coins → $${usdt.toFixed(2)} USDT`, timestamp: firebase.firestore.FieldValue.serverTimestamp() });
-    } catch (e) {}
-    showToast(`✅ $${usdt.toFixed(2)}`);
-    closeModal('exchangeModal');
+        const amt = parseInt(document.getElementById('exchangeInput').value) || 0;
+        if (amt <= 0) { showToast('Invalid', 'error'); return; }
+
+        // Use the latest Firestore balance for the check. This prevents a
+        // stale local balance or a double-click from creating bad deductions.
+        const exchangeUsdt = amt / exchangeRate;
+        if (!confirm(`${amt} Coins → $${exchangeUsdt.toFixed(2)}?`)) return;
+
+        const userRef = db.collection('users').doc(currentUser.uid);
+        const result = await db.runTransaction(async (tx) => {
+            const snap = await tx.get(userRef);
+            if (!snap.exists) throw new Error('USER_NOT_FOUND');
+
+            const data = snap.data() || {};
+            const serverCoins = Math.max(0, Number(data.coins) || 0);
+            const serverUsdt = Math.max(0, Number(data.usdt) || 0);
+
+            if (serverCoins < amt) throw new Error('INSUFFICIENT_COINS');
+
+            const newCoins = serverCoins - amt;
+            const newUsdt = serverUsdt + exchangeUsdt;
+
+            tx.update(userRef, {
+                coins: newCoins,
+                usdt: newUsdt
+            });
+
+            return { coins: newCoins, usdt: newUsdt };
+        });
+
+        // Only update local UI/storage AFTER Firestore succeeds.
+        userData.coins = result.coins;
+        userData.usdt = result.usdt;
+        saveCoinsToLocal(result.coins);
+        updateUI();
+
+        // Transaction history is separate from the balance update. If this
+        // write fails, the coin exchange itself has already succeeded.
+        try {
+            await db.collection('transactions').add({
+                userId: currentUser.uid,
+                type: 'exchange',
+                amount: -amt,
+                description: `${amt} Coins → $${exchangeUsdt.toFixed(2)} USDT`,
+                timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            });
+        } catch (historyError) {}
+
+        showToast(`✅ $${exchangeUsdt.toFixed(2)}`);
+        closeModal('exchangeModal');
+    } catch (e) {
+        if (e.message === 'INSUFFICIENT_COINS') {
+            showToast('❌ Insufficient Coins', 'error');
+        } else if (e.message === 'USER_NOT_FOUND') {
+            showToast('❌ User data not found', 'error');
+        } else {
+            // Do not deduct locally when the server transaction fails.
+            showToast('❌ Exchange failed — Coins were not deducted', 'error');
+        }
+    } finally {
+        releaseCoinLock();
+    }
 }
 async function requestWithdraw() {
     if (!isWithdrawOpen) { showToast('❌ Locked', 'error'); return; }
@@ -7926,21 +7979,29 @@ async function sendCoinGift() {
         const snapshot = await db.collection('users').where('email', '==', receiverEmail).get();
         if (snapshot.empty) { msgEl.textContent = '❌ Not found'; msgEl.style.color = 'var(--rose-500)'; return; }
         const receiverDoc = snapshot.docs[0];
-        userData.coins -= totalCost;
-        saveCoinsToLocal(userData.coins);
-        updateUI();
-        await db.runTransaction(async (tx) => {
+        const transferResult = await db.runTransaction(async (tx) => {
             const sRef = db.collection('users').doc(currentUser.uid);
             const rRef = db.collection('users').doc(receiverDoc.id);
             const sDoc = await tx.get(sRef);
             const rDoc = await tx.get(rRef);
-            tx.update(sRef, { coins: (sDoc.data().coins || 0) - totalCost });
-            tx.update(rRef, { coins: (rDoc.data().coins || 0) + amount });
+            const senderCoins = Math.max(0, Number(sDoc.data()?.coins) || 0);
+            const receiverCoins = Math.max(0, Number(rDoc.data()?.coins) || 0);
+            if (senderCoins < totalCost) throw new Error('INSUFFICIENT_COINS');
+            const newSenderCoins = senderCoins - totalCost;
+            tx.update(sRef, { coins: newSenderCoins });
+            tx.update(rRef, { coins: receiverCoins + amount });
+            return newSenderCoins;
         });
+        userData.coins = transferResult;
+        saveCoinsToLocal(transferResult);
+        updateUI();
         msgEl.textContent = '✅ Sent';
         msgEl.style.color = 'var(--mint-600)';
         showToast('🎁 Sent!', 'success');
-    } catch (e) { msgEl.textContent = '❌ Failed'; msgEl.style.color = 'var(--rose-500)'; }
+    } catch (e) {
+        msgEl.textContent = e.message === 'INSUFFICIENT_COINS' ? '❌ Insufficient Coins' : '❌ Failed';
+        msgEl.style.color = 'var(--rose-500)';
+    }
 }
 
 // ============================================================
