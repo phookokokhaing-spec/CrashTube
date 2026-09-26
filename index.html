@@ -5096,6 +5096,322 @@ background: linear-gradient(
         max-height: 240px !important;
     }
 }
+/* ============================================================
+   🌈 DIGITAL MARKET PAGE — FULL SCREEN (isolated)
+============================================================ */
+#dmxPage {
+    position: fixed;
+    inset: 0;
+    z-index: 99998;
+    background: #070817;
+    background-image:
+        radial-gradient(circle at 10% 0%, rgba(124,58,237,.18), transparent 30%),
+        radial-gradient(circle at 90% 90%, rgba(34,211,238,.12), transparent 30%);
+    display: none;
+    flex-direction: column;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+}
+#dmxPage.show { display: flex; }
+
+/* Top bar */
+.dmx-topbar {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 14px;
+    padding-top: calc(12px + env(safe-area-inset-top));
+    background: rgba(8,10,25,.92);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    border-bottom: 1px solid rgba(168,85,247,.18);
+}
+.dmx-back {
+    width: 40px;
+    height: 40px;
+    border-radius: 13px;
+    border: 1px solid rgba(168,85,247,.28);
+    background: rgba(168,85,247,.10);
+    color: #d8b4fe;
+    font-size: 15px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: all .15s;
+}
+.dmx-back:active { transform: scale(.92); background: rgba(168,85,247,.22); }
+.dmx-page-title {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 14px;
+    font-weight: 800;
+    color: #fff;
+    letter-spacing: .5px;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.dmx-live-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #22c55e;
+    box-shadow: 0 0 10px #22c55e;
+    animation: dmxBlink 1.4s infinite;
+    flex-shrink: 0;
+}
+@keyframes dmxBlink {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: .4; transform: scale(.8); }
+}
+.dmx-page-rate {
+    font-size: 10px;
+    font-weight: 700;
+    color: #fbbf24;
+    font-family: 'Courier New', monospace;
+    background: rgba(251,191,36,.12);
+    border: 1px solid rgba(251,191,36,.28);
+    padding: 6px 10px;
+    border-radius: 10px;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+/* Body */
+.dmx-page-body {
+    flex: 1;
+    padding: 14px;
+    padding-bottom: 40px;
+    max-width: 640px;
+    margin: 0 auto;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+/* Ticker */
+.dmx-tick {
+    overflow: hidden;
+    background: #06050f;
+    border: 1px solid rgba(168,85,247,.28);
+    border-radius: 12px;
+    padding: 8px 0;
+    margin-bottom: 12px;
+    position: relative;
+    box-shadow: inset 0 0 18px rgba(168,85,247,.10);
+}
+.dmx-tick::before,
+.dmx-tick::after {
+    content: '';
+    position: absolute;
+    top: 0; bottom: 0;
+    width: 20px;
+    z-index: 2;
+    pointer-events: none;
+}
+.dmx-tick::before { left: 0; background: linear-gradient(90deg, #06050f, transparent); }
+.dmx-tick::after  { right: 0; background: linear-gradient(270deg, #06050f, transparent); }
+.dmx-trk {
+    display: inline-block;
+    white-space: nowrap;
+    animation: dmxMove 30s linear infinite;
+    font-family: 'Courier New', monospace;
+    font-weight: 800;
+    font-size: 13px;
+    padding-left: 100%;
+}
+@keyframes dmxMove {
+    0%   { transform: translateX(0); }
+    100% { transform: translateX(-100%); }
+}
+.dmx-ti { display: inline-block; padding: 0 14px; letter-spacing: .4px; }
+.dmx-ti .s { color: #fff; }
+.dmx-ti .u { color: #00e676; text-shadow: 0 0 8px rgba(0,230,118,.5); }
+.dmx-ti .d { color: #ff1744; text-shadow: 0 0 8px rgba(255,23,68,.5); }
+.dmx-ti .h { color: #ff1744; text-shadow: 0 0 10px #ff1744; }
+.dmx-ti .l { color: #22d3ee; text-shadow: 0 0 10px #22d3ee; }
+.dmx-ti .m { color: #fbbf24; text-shadow: 0 0 8px rgba(251,191,36,.5); }
+
+/* Wave box */
+.dmx-wv {
+    background: rgba(255,255,255,.035);
+    border: 1px solid rgba(168,85,247,.20);
+    border-radius: 14px;
+    padding: 14px 12px;
+    text-align: center;
+    margin-bottom: 12px;
+}
+.dmx-wl {
+    font-size: 9px;
+    font-weight: 800;
+    color: #aaa4bd;
+    letter-spacing: 2px;
+    margin-bottom: 8px;
+}
+.dmx-wb {
+    display: flex;
+    justify-content: center;
+    align-items: flex-end;
+    gap: 3px;
+    height: 34px;
+    margin-bottom: 8px;
+}
+.dmx-bar {
+    width: 5px;
+    border-radius: 3px 3px 0 0;
+    transition: height .35s ease, background .35s ease;
+}
+.dmx-xp {
+    font-size: 12px;
+    font-weight: 800;
+    color: #fff;
+    font-family: 'Courier New', monospace;
+    line-height: 1.3;
+}
+
+/* Board */
+.dmx-brd {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+.dmx-cl {
+    background: rgba(255,255,255,.045);
+    border: 1px solid rgba(255,255,255,.09);
+    border-radius: 12px;
+    padding: 10px 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-family: 'Courier New', monospace;
+    min-width: 0;
+    box-sizing: border-box;
+    overflow: hidden;
+    transition: background .3s;
+}
+.dmx-cl > div:first-child {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+}
+.dmx-pr {
+    font-size: 11px;
+    font-weight: 800;
+    color: #fff;
+    letter-spacing: .5px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.dmx-pc {
+    font-size: 9px;
+    font-weight: 800;
+    margin-top: 2px;
+    white-space: nowrap;
+}
+.dmx-pv {
+    font-size: 13px;
+    font-weight: 900;
+    white-space: nowrap;
+    flex-shrink: 0;
+    margin-left: 6px;
+    transition: color .3s;
+}
+.dmx-cl .u   { color: #00c853 !important; }
+.dmx-cl .d   { color: #ff1744 !important; }
+.dmx-cl .hi  { color: #ff1744 !important; text-shadow: 0 0 8px rgba(255,23,68,.75); }
+.dmx-cl .lo  { color: #22d3ee !important; text-shadow: 0 0 8px rgba(34,211,238,.75); }
+.dmx-cl .mid { color: #fbbf24 !important; text-shadow: 0 0 6px rgba(251,191,36,.5); }
+
+@keyframes dmxFG {
+    0%, 100% { background: rgba(255,255,255,.045); }
+    50% { background: rgba(0,200,83,.30); }
+}
+@keyframes dmxFR {
+    0%, 100% { background: rgba(255,255,255,.045); }
+    50% { background: rgba(255,23,68,.30); }
+}
+.dmx-fu { animation: dmxFG .8s ease; }
+.dmx-fd { animation: dmxFR .8s ease; }
+
+/* Converter */
+.dmx-cv {
+    background: rgba(255,255,255,.035);
+    border: 1px solid rgba(168,85,247,.20);
+    border-radius: 14px;
+    padding: 16px;
+    text-align: center;
+}
+.dmx-cv-title {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 14px;
+    font-weight: 800;
+    color: #fff;
+    margin-bottom: 12px;
+}
+.dmx-cv input {
+    width: 100%;
+    padding: 12px 14px;
+    border-radius: 11px;
+    border: 1px solid rgba(168,85,247,.28);
+    background: rgba(0,0,0,.4);
+    color: #fff;
+    font-size: 14px;
+    font-family: 'Courier New', monospace;
+    outline: none;
+    margin-bottom: 10px;
+    box-sizing: border-box;
+}
+.dmx-cv input:focus {
+    border-color: #22d3ee;
+    box-shadow: 0 0 0 3px rgba(34,211,238,.15);
+}
+.dmx-co {
+    font-size: 13px;
+    font-weight: 800;
+    color: #fbbf24;
+    margin-bottom: 12px;
+    font-family: 'Courier New', monospace;
+}
+.dmx-cb {
+    width: 100%;
+    padding: 13px;
+    border: none;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #7c3aed, #a855f7 55%, #22d3ee);
+    color: #fff;
+    font-weight: 800;
+    font-size: 13px;
+    letter-spacing: 1px;
+    cursor: pointer;
+    box-shadow: 0 8px 20px rgba(124,58,237,.35);
+    font-family: inherit;
+}
+.dmx-cb:active { transform: scale(.97); }
+
+@media (min-width: 640px) {
+    .dmx-brd { grid-template-columns: repeat(4, 1fr); }
+}
+@media (max-width: 360px) {
+    .dmx-page-body { padding: 10px; }
+    .dmx-pr { font-size: 10px; }
+    .dmx-pv { font-size: 11px; }
+    .dmx-pc { font-size: 8px; }
+    .dmx-page-title { font-size: 12px; }
+    .dmx-page-rate { font-size: 9px; padding: 4px 8px; }
+    .dmx-wb { height: 26px; }
+    .dmx-bar { width: 4px; }
+}
 </style>
 </style>
 
@@ -5158,98 +5474,107 @@ background: linear-gradient(
         </div>
     </div>
 
-    <!-- ============================================================ -->
-    <!-- SIDE DRAWER -->
-    <!-- ============================================================ -->
-    <div class="drawer-overlay" id="drawerOverlay" onclick="closeDrawer()"></div>
-    <aside class="side-drawer" id="sideDrawer">
-        <!-- Drawer Header -->
-        <div class="drawer-header">
-            <div class="drawer-user">
-                <img id="drawerAvatar" src="https://ui-avatars.com/api/?name=User&background=3b82f6&color=fff&size=120" alt="avatar" />
-                <div class="drawer-user-info">
-                    <div class="drawer-username" id="drawerUsername">Loading...</div>
-                    <div class="drawer-useremail" id="drawerEmail">user@email.com</div>
-                </div>
-            </div>
-            <div class="drawer-balance-chip">
-                <span class="chip-coin">🪙</span>
-                <span class="chip-value" id="drawerCoins">0</span>
-                <span class="chip-usdt" id="drawerUsdt">$0.00</span>
+<!-- ============================================================ -->
+<!-- SIDE DRAWER -->
+<!-- ============================================================ -->
+<div class="drawer-overlay" id="drawerOverlay" onclick="closeDrawer()"></div>
+<aside class="side-drawer" id="sideDrawer">
+    <!-- Drawer Header -->
+    <div class="drawer-header">
+        <div class="drawer-user">
+            <img id="drawerAvatar" src="https://ui-avatars.com/api/?name=User&background=3b82f6&color=fff&size=120" alt="avatar" />
+            <div class="drawer-user-info">
+                <div class="drawer-username" id="drawerUsername">Loading...</div>
+                <div class="drawer-useremail" id="drawerEmail">user@email.com</div>
             </div>
         </div>
-
-        <!-- Drawer Menu -->
-        <nav class="drawer-menu">
-            <div class="drawer-section-title">MAIN</div>
-            <button class="drawer-item" onclick="closeDrawer(); scrollToAds();">
-                <div class="di-icon blue"><i class="fas fa-play"></i></div>
-                <span>Ad Tasks</span>
-                <i class="fas fa-chevron-right di-arrow"></i>
-            </button>
-            <button class="drawer-item" onclick="closeDrawer(); openModal('levelModal');">
-                <div class="di-icon mint"><i class="fas fa-trophy"></i></div>
-                <span>VIP Level</span>
-                <i class="fas fa-chevron-right di-arrow"></i>
-            </button>
-            <button class="drawer-item" onclick="closeDrawer(); openModal('marketModal');">
-                <div class="di-icon blue"><i class="fas fa-store"></i></div>
-                <span>Market</span>
-                <i class="fas fa-chevron-right di-arrow"></i>
-            </button>
-            <button class="drawer-item" onclick="closeDrawer(); openModal('leaderboardModal'); loadLeaderboard('today');">
-                <div class="di-icon mint"><i class="fas fa-ranking-star"></i></div>
-                <span>Leaderboard</span>
-                <i class="fas fa-chevron-right di-arrow"></i>
-            </button>
-
-            <div class="drawer-section-title">ACCOUNT</div>
-            <button class="drawer-item" onclick="closeDrawer(); openModal('profileModal');">
-                <div class="di-icon blue"><i class="fas fa-user"></i></div>
-                <span>Profile</span>
-                <i class="fas fa-chevron-right di-arrow"></i>
-            </button>
-            <button class="drawer-item" onclick="closeDrawer(); openModal('refModal');">
-                <div class="di-icon mint"><i class="fas fa-users"></i></div>
-                <span>Refer & Earn</span>
-                <i class="fas fa-chevron-right di-arrow"></i>
-            </button>
-            <button class="drawer-item" onclick="closeDrawer(); openModal('achModal');">
-                <div class="di-icon blue"><i class="fas fa-medal"></i></div>
-                <span>Achievements</span>
-                <span class="di-badge" id="drawerAchBadge" style="display:none;">0</span>
-                <i class="fas fa-chevron-right di-arrow"></i>
-            </button>
-            <button class="drawer-item" onclick="closeDrawer(); openHistoryModal();">
-                <div class="di-icon mint"><i class="fas fa-history"></i></div>
-                <span>History</span>
-                <i class="fas fa-chevron-right di-arrow"></i>
-            </button>
-
-            <div class="drawer-section-title">SETTINGS</div>
-            <button class="drawer-item" onclick="toggleTheme();">
-                <div class="di-icon blue"><i class="fas fa-moon" id="drawerThemeIcon"></i></div>
-                <span>Dark / Light</span>
-                <i class="fas fa-chevron-right di-arrow"></i>
-            </button>
-            <div class="drawer-item" style="display:block;cursor:default;">
-                <div style="display:flex;align-items:center;gap:12px;margin-bottom:9px;">
-                    <div class="di-icon mint"><i class="fas fa-globe"></i></div><span data-i18n="language">Language</span>
-                </div>
-                <div class="lang-switch">
-                    <button id="langMyBtn" onclick="switchLanguage('my')">မြန်မာ</button>
-                    <button id="langEnBtn" onclick="switchLanguage('en')">English</button>
-                </div>
-            </div>
-        </nav>
-
-        <!-- Drawer Footer -->
-        <div class="drawer-footer">
-            <button class="drawer-logout" onclick="closeDrawer(); handleLogout();">
-                <i class="fas fa-sign-out-alt"></i> Logout
-            </button>
+        <div class="drawer-balance-chip">
+            <span class="chip-coin">🪙</span>
+            <span class="chip-value" id="drawerCoins">0</span>
+            <span class="chip-usdt" id="drawerUsdt">$0.00</span>
         </div>
-    </aside>
+    </div>
+
+    <!-- Drawer Menu -->
+    <nav class="drawer-menu">
+        <div class="drawer-section-title">MAIN</div>
+        <button class="drawer-item" onclick="closeDrawer(); scrollToAds();">
+            <div class="di-icon blue"><i class="fas fa-play"></i></div>
+            <span>Ad Tasks</span>
+            <i class="fas fa-chevron-right di-arrow"></i>
+        </button>
+
+        <!-- 🌈 DIGITAL MARKET — NEW -->
+        <button class="drawer-item" onclick="closeDrawer(); openDmxPage();">
+            <div class="di-icon mint"><i class="fas fa-chart-line"></i></div>
+            <span>Digital Market</span>
+            <span class="di-badge" style="background:linear-gradient(135deg,#22c55e,#16a34a);">LIVE</span>
+            <i class="fas fa-chevron-right di-arrow"></i>
+        </button>
+
+        <button class="drawer-item" onclick="closeDrawer(); openModal('levelModal');">
+            <div class="di-icon mint"><i class="fas fa-trophy"></i></div>
+            <span>VIP Level</span>
+            <i class="fas fa-chevron-right di-arrow"></i>
+        </button>
+        <button class="drawer-item" onclick="closeDrawer(); openModal('marketModal');">
+            <div class="di-icon blue"><i class="fas fa-store"></i></div>
+            <span>Market</span>
+            <i class="fas fa-chevron-right di-arrow"></i>
+        </button>
+        <button class="drawer-item" onclick="closeDrawer(); openModal('leaderboardModal'); loadLeaderboard('today');">
+            <div class="di-icon mint"><i class="fas fa-ranking-star"></i></div>
+            <span>Leaderboard</span>
+            <i class="fas fa-chevron-right di-arrow"></i>
+        </button>
+
+        <div class="drawer-section-title">ACCOUNT</div>
+        <button class="drawer-item" onclick="closeDrawer(); openModal('profileModal');">
+            <div class="di-icon blue"><i class="fas fa-user"></i></div>
+            <span>Profile</span>
+            <i class="fas fa-chevron-right di-arrow"></i>
+        </button>
+        <button class="drawer-item" onclick="closeDrawer(); openModal('refModal');">
+            <div class="di-icon mint"><i class="fas fa-users"></i></div>
+            <span>Refer & Earn</span>
+            <i class="fas fa-chevron-right di-arrow"></i>
+        </button>
+        <button class="drawer-item" onclick="closeDrawer(); openModal('achModal');">
+            <div class="di-icon blue"><i class="fas fa-medal"></i></div>
+            <span>Achievements</span>
+            <span class="di-badge" id="drawerAchBadge" style="display:none;">0</span>
+            <i class="fas fa-chevron-right di-arrow"></i>
+        </button>
+        <button class="drawer-item" onclick="closeDrawer(); openHistoryModal();">
+            <div class="di-icon mint"><i class="fas fa-history"></i></div>
+            <span>History</span>
+            <i class="fas fa-chevron-right di-arrow"></i>
+        </button>
+
+        <div class="drawer-section-title">SETTINGS</div>
+        <button class="drawer-item" onclick="toggleTheme();">
+            <div class="di-icon blue"><i class="fas fa-moon" id="drawerThemeIcon"></i></div>
+            <span>Dark / Light</span>
+            <i class="fas fa-chevron-right di-arrow"></i>
+        </button>
+        <div class="drawer-item" style="display:block;cursor:default;">
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:9px;">
+                <div class="di-icon mint"><i class="fas fa-globe"></i></div><span data-i18n="language">Language</span>
+            </div>
+            <div class="lang-switch">
+                <button id="langMyBtn" onclick="switchLanguage('my')">မြန်မာ</button>
+                <button id="langEnBtn" onclick="switchLanguage('en')">English</button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Drawer Footer -->
+    <div class="drawer-footer">
+        <button class="drawer-logout" onclick="closeDrawer(); handleLogout();">
+            <i class="fas fa-sign-out-alt"></i> Logout
+        </button>
+    </div>
+</aside>
 
     <!-- ============================================================ -->
     <!-- AUTH SCREEN -->
@@ -5539,56 +5864,47 @@ background: linear-gradient(
             </div>
         </section>
 
-    
-<!-- ============================================ -->
-<!-- DASHBOARD -->
-<!-- ============================================ -->
-<section class="section-block">
-    <div class="section-header-row">
-        <div class="section-title-block">
-            <i class="fas fa-chart-line"></i> Dashboard
-        </div>
-        <button class="section-see-all" onclick="loadDashboard()">
-            <i class="fas fa-sync-alt"></i> Refresh
-        </button>
-    </div>
-    <div class="dash-tile">
-        <div class="dash-top-tile" id="topViewerCard">
-            <div class="dtt-loading">
-                <i class="fas fa-spinner fa-spin"></i> Loading...
+        <!-- ============================================ -->
+        <!-- DASHBOARD -->
+        <!-- ============================================ -->
+        <section class="section-block">
+            <div class="section-header-row">
+                <div class="section-title-block">
+                    <i class="fas fa-chart-line"></i> Dashboard
+                </div>
+                <button class="section-see-all" onclick="loadDashboard()">
+                    <i class="fas fa-sync-alt"></i> Refresh
+                </button>
             </div>
-        </div>
-        <div class="dash-list-tile" id="adHistoryList">
-            <div class="dlt-loading">Loading...</div>
-        </div>
-    </div>
-</section>
+            <div class="dash-tile">
+                <div class="dash-top-tile" id="topViewerCard">
+                    <div class="dtt-loading">
+                        <i class="fas fa-spinner fa-spin"></i> Loading...
+                    </div>
+                </div>
+                <div class="dash-list-tile" id="adHistoryList">
+                    <div class="dlt-loading">Loading...</div>
+                </div>
+            </div>
+        </section>
 
-<!-- ============================================ -->
-<!-- TRADITIONAL BANNER (Dashboard အောက်) -->
-<!-- ============================================ -->
-<div class="adsterra-banner">
-    <script>
-      atOptions = {
-        'key' : 'cc7cd0a23b6233b016189f04e29fda5c',
-        'format' : 'iframe',
-        'height' : 250,
-        'width' : 300,
-        'params' : {}
-      };
-    </script>
-    <script src="https://www.highrevenueformat.com/cc7cd0a23b6233b016189f04e29fda5c/invoke.js"></script>
-</div>
 
-   <!-- ============================================ -->
-   <!-- NATIVE BANNER (Dashboard အပေါ်) -->
-<!-- ============================================ -->
-<div class="adsterra-banner">
-    <script async="async" data-cfasync="false"
-      src="https://pl31368989.profitableratecpmnetwork.com/111e007a1bcb3c55bd1631d585002651/invoke.js">
-    </script>
-    <div id="container-111e007a1bcb3c55bd1631d585002651"></div>
-</div>    
+        <!-- Adsterra Banner -->
+        <div class="adsterra-banner">
+            <script>
+              atOptions = {
+                'key' : 'cc7cd0a23b6233b016189f04e29fda5c',
+                'format' : 'iframe',
+                'height' : 250,
+                'width' : 300,
+                'params' : {}
+              };
+            </script>
+            <script src="https://www.highrevenueformat.com/cc7cd0a23b6233b016189f04e29fda5c/invoke.js"></script>
+        </div>
+
+        <div class="bottom-spacer"></div>
+    
         <!-- ============================================================ -->
         <!-- NEW ORBIT BOTTOM DOCK -->
         <!-- ============================================================ -->
@@ -5645,6 +5961,41 @@ background: linear-gradient(
         </div>
     </div>
 
+  <!-- 🌈 DIGITAL MARKET PAGE -->
+<div id="dmxPage">
+    <div class="dmx-topbar">
+        <button class="dmx-back" onclick="closeDmxPage()">
+            <i class="fas fa-arrow-left"></i>
+        </button>
+        <div class="dmx-page-title">
+            <span class="dmx-live-dot"></span> Digital Market
+        </div>
+        <div class="dmx-page-rate" id="dmxPageRate">1$ = 3000 C</div>
+    </div>
+
+    <div class="dmx-page-body">
+        <div class="dmx-tick">
+            <div class="dmx-trk" id="dmxTrk"></div>
+        </div>
+
+        <div class="dmx-wv">
+            <div class="dmx-wl">⚡ DIGITAL WAVE PULSE & EXACT VALUE</div>
+            <div class="dmx-wb" id="dmxWb"></div>
+            <div class="dmx-xp" id="dmxXp">Current: 0.0000 MMK / Coin</div>
+        </div>
+
+        <div class="dmx-brd" id="dmxBrd"></div>
+
+        <div class="dmx-cv">
+            <div class="dmx-cv-title">🔄 Coin to MMK Converter</div>
+            <input type="number" id="dmxIn" placeholder="Enter Coins" oninput="dmxCalc()" />
+            <div class="dmx-co">You will get: <span id="dmxOut">0.00</span> MMK</div>
+            <button class="dmx-cb" onclick="dmxGo()">
+                <i class="fas fa-arrows-rotate"></i> EXCHANGE NOW
+            </button>
+        </div>
+    </div>
+</div>
     <!-- ============================================================ -->
     <!-- PROFILE MODAL -->
     <!-- ============================================================ -->
@@ -8643,7 +8994,278 @@ setTimeout(() => {
     const vs = document.getElementById('videosSection');
     if (vs) _videoSectionObserver.observe(vs);
 }, 1000);
+// ============================================================
+//  🌈 DIGITAL MARKET PAGE — FULL LOGIC
+// ============================================================
+(function(){
+    const P = [
+        { s:'BTC',  b:68000, v:0.8 },
+        { s:'ETH',  b:3500,  v:1.0 },
+        { s:'COIN', b:0,     v:0.6, m:true },
+        { s:'MMK',  b:2100,  v:0.3 },
+        { s:'GOLD', b:2050,  v:0.5 },
+        { s:'USDT', b:1.00,  v:0.1 },
+        { s:'XAU',  b:68.5,  v:0.7 },
+        { s:'SILV', b:24.3,  v:0.9 }
+    ];
+    const C = ['#ff1744','#ff9100','#ffea00','#00e676',
+               '#22d3ee','#a855f7','#f472b6','#00e5ff'];
 
+    let state = {}, prev = {}, tickT = null, waveT = null;
+    let booted = false, opened = false;
+
+    // ---- Base rate (MMK per 1 coin) ----
+    function baseRate(){
+        const mr = (typeof mmkRate !== 'undefined' && mmkRate > 0) ? mmkRate : 2100;
+        const er = (typeof exchangeRate !== 'undefined' && exchangeRate > 0) ? exchangeRate : 3000;
+        return mr / er;
+    }
+
+    // ---- Color coding ----
+    function colorClass(price, all, pr){
+        const mx = Math.max(...all), mn = Math.min(...all);
+        const r = (mx - mn) || 1;
+        const pos = (price - mn) / r;
+        if (pos >= 0.92) return 'hi';
+        if (pos <= 0.08) return 'lo';
+        if (pos >= 0.4 && pos <= 0.6) return 'mid';
+        if (pr !== undefined){
+            if (price > pr) return 'u';
+            if (price < pr) return 'd';
+        }
+        return 'mid';
+    }
+
+    // ---- Ticker item ----
+    function tickItem(p, price, pr){
+        const d = pr !== undefined ? price - pr : 0;
+        const pc = pr ? (d/pr)*100 : 0;
+        const all = Object.values(state).filter(v => typeof v === 'number');
+        const cc = colorClass(price, all.length ? all : [price], pr);
+
+        let ar = '■', tc = 'm';
+        if (d > 0){ ar='▲'; tc='u'; }
+        else if (d < 0){ ar='▼'; tc='d'; }
+        else if (cc === 'hi'){ ar='🔥'; tc='h'; }
+        else if (cc === 'lo'){ ar='❄'; tc='l'; }
+
+        const dp = price < 10 ? 4 : 2;
+        const sg = pc >= 0 ? '+' : '';
+        return `<span class="dmx-ti">` +
+               `<span class="s">${p.s}</span>` +
+               `<span class="${tc}"> ${ar} $${price.toFixed(dp)}</span>` +
+               `<span class="${pc>=0?'u':'d'}"> (${sg}${pc.toFixed(2)}%)</span>` +
+               `</span>`;
+    }
+
+    // ---- Render ticker ----
+    function updTick(){
+        const el = document.getElementById('dmxTrk');
+        if (!el) return;
+        let h = '';
+        P.forEach(p => {
+            const v = state[p.s];
+            if (typeof v === 'number') h += tickItem(p, v, prev[p.s]);
+        });
+        el.innerHTML = h + h;
+    }
+
+    // ---- Render price board ----
+    function updBoard(){
+        const el = document.getElementById('dmxBrd');
+        if (!el) return;
+        const all = Object.values(state).filter(v => typeof v === 'number');
+        let h = '';
+        P.forEach(p => {
+            const v = state[p.s];
+            if (typeof v !== 'number') return;
+            const pr = prev[p.s];
+            const d = pr !== undefined ? v - pr : 0;
+            const pc = pr ? (d/pr)*100 : 0;
+            const cc = colorClass(v, all, pr);
+            const dp = v < 10 ? 4 : 2;
+            const ar = d > 0 ? '▲' : d < 0 ? '▼' : '■';
+            h += `<div class="dmx-cl" id="dmxC-${p.s}">` +
+                 `<div>` +
+                 `<div class="dmx-pr">${p.s}${p.m ? ' ⭐' : ''}</div>` +
+                 `<div class="dmx-pc ${d>=0?'u':'d'}">${ar} ${pc>=0?'+':''}${pc.toFixed(2)}%</div>` +
+                 `</div>` +
+                 `<div class="dmx-pv ${cc}">$${v.toFixed(dp)}</div>` +
+                 `</div>`;
+        });
+        el.innerHTML = h;
+
+        // Flash effect
+        P.forEach(p => {
+            const v = state[p.s], pr = prev[p.s];
+            if (typeof v !== 'number' || pr === undefined) return;
+            const c = document.getElementById('dmxC-' + p.s);
+            if (!c) return;
+            if (v > pr){
+                c.classList.remove('dmx-fd'); void c.offsetWidth; c.classList.add('dmx-fu');
+            } else if (v < pr){
+                c.classList.remove('dmx-fu'); void c.offsetWidth; c.classList.add('dmx-fd');
+            }
+        });
+    }
+
+    // ---- Render wave bars ----
+    function updWave(){
+        const el = document.getElementById('dmxWb');
+        if (!el) return;
+        let h = '';
+        for (let i = 0; i < 26; i++){
+            const ht = 6 + Math.random() * 26;
+            const c = C[i % C.length];
+            h += `<div class="dmx-bar" style="height:${ht}px;background:${c};box-shadow:0 0 6px ${c};"></div>`;
+        }
+        el.innerHTML = h;
+    }
+
+    // ---- Render exact price ----
+    function updXp(){
+        const el = document.getElementById('dmxXp');
+        const rl = document.getElementById('dmxPageRate');
+        if (!el) return;
+        const b = baseRate();
+        const f = (Math.random() * 0.6 - 0.3);
+        const d = b * (1 + f/100);
+
+        let col = '#fbbf24', ar = '■';
+        if (f > 0.05){ col = '#00e676'; ar = '▲'; }
+        else if (f < -0.05){ col = '#ff1744'; ar = '▼'; }
+
+        el.innerHTML = `Current: <span style="color:${col}">${d.toFixed(4)} MMK</span> / 1 Coin <span style="color:${col}">${ar} ${f>=0?'+':''}${f.toFixed(2)}%</span>`;
+        if (rl) rl.textContent = `1$ = ${exchangeRate || 3000} C`;
+    }
+
+    // ---- Boot ----
+    function boot(){
+        if (booted) return;
+        booted = true;
+
+        // Seed prices
+        P.forEach(p => {
+            state[p.s] = p.m
+                ? Math.max(baseRate(), 0.0001)
+                : p.b * (0.98 + Math.random() * 0.04);
+            prev[p.s] = state[p.s];
+        });
+
+        updTick(); updBoard(); updWave(); updXp();
+
+        // Market tick every 2 sec
+        if (tickT) clearInterval(tickT);
+        tickT = setInterval(() => {
+            P.forEach(p => {
+                const old = state[p.s];
+                prev[p.s] = old;
+                let np;
+                if (p.m){
+                    const b = baseRate();
+                    np = b * (1 + (Math.random() * 0.8 - 0.4) / 100);
+                } else {
+                    np = old * (1 + (Math.random() * p.v * 2 - p.v) / 100);
+                }
+                state[p.s] = np;
+            });
+            updTick(); updBoard(); updXp();
+        }, 2000);
+
+        // Wave bars every 400ms
+        if (waveT) clearInterval(waveT);
+        waveT = setInterval(updWave, 400);
+    }
+
+    // ---- Open page ----
+    window.openDmxPage = function(){
+        const page = document.getElementById('dmxPage');
+        if (!page) return;
+        page.classList.add('show');
+        page.scrollTop = 0;
+        document.body.style.overflow = 'hidden';
+        opened = true;
+        if (!booted) boot();
+        updXp();
+    };
+
+    // ---- Close page ----
+    window.closeDmxPage = function(){
+        const page = document.getElementById('dmxPage');
+        if (!page) return;
+        page.classList.remove('show');
+        document.body.style.overflow = '';
+        opened = false;
+    };
+
+    // ---- Calculator ----
+    window.dmxCalc = function(){
+        const inp = document.getElementById('dmxIn');
+        const out = document.getElementById('dmxOut');
+        if (!inp || !out) return;
+        const v = parseInt(inp.value) || 0;
+        out.textContent = (v * baseRate()).toFixed(2);
+    };
+
+    // ---- Execute exchange ----
+    window.dmxGo = function(){
+        const inp = document.getElementById('dmxIn');
+        if (!inp) return;
+        const v = parseInt(inp.value) || 0;
+
+        if (v <= 0){
+            if (typeof showToast === 'function') showToast('❌ Enter Coins', 'error');
+            return;
+        }
+        const myCoins = (typeof userData !== 'undefined' && userData.coins) ? userData.coins : 0;
+        if (v > myCoins){
+            if (typeof showToast === 'function') showToast('❌ Insufficient Coins', 'error');
+            return;
+        }
+
+        const mmk = v * baseRate();
+
+        // Local update
+        if (typeof userData !== 'undefined') userData.coins -= v;
+        if (typeof saveCoinsToLocal === 'function' && typeof userData !== 'undefined'){
+            saveCoinsToLocal(userData.coins);
+        }
+        if (typeof updateUI === 'function') updateUI();
+
+        // Firebase sync
+        if (typeof currentUser !== 'undefined' && currentUser && typeof db !== 'undefined'){
+            try {
+                db.collection('users').doc(currentUser.uid).update({
+                    coins: firebase.firestore.FieldValue.increment(-v)
+                }).catch(()=>{});
+                db.collection('transactions').add({
+                    userId: currentUser.uid,
+                    type: 'digital_market_exchange',
+                    amount: -v,
+                    description: `${v} Coins → ${mmk.toFixed(2)} MMK`,
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                }).catch(()=>{});
+            } catch(e){}
+        }
+
+        inp.value = '';
+        const out = document.getElementById('dmxOut');
+        if (out) out.textContent = '0.00';
+
+        if (typeof showToast === 'function'){
+            showToast(`✅ ${mmk.toFixed(2)} MMK`, 'success');
+        }
+    };
+
+    // ---- ESC key close ----
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && opened) window.closeDmxPage();
+    });
+
+    console.log('✅ Digital Market page loaded');
+})();
+
+console.log('✅ Digital Market Exchange loaded');
 console.log('✅ Video Tasks loaded');
 console.log('✅ CASH TUBE Rewards - Orbit Neon UI Loaded');
     </script>
