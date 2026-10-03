@@ -7792,8 +7792,20 @@ function updateWithdrawUI() {
     const statusEl = document.getElementById('withdrawStatus');
     const btn = document.getElementById('withdrawBtn');
     if (!statusEl || !btn) return;
-    if (isWithdrawOpen) { statusEl.textContent = '✅ Open'; statusEl.style.color = 'var(--mint-600)'; btn.disabled = false; }
-    else { statusEl.textContent = '🔒 Locked'; statusEl.style.color = 'var(--rose-500)'; btn.disabled = true; }
+
+    if (isWithdrawOpen) {
+        statusEl.textContent = '✅ Open';
+        statusEl.style.color = 'var(--mint-600)';
+        btn.disabled = false;
+        btn.style.opacity = '1';
+        btn.style.pointerEvents = 'auto';
+    } else {
+        statusEl.textContent = '🔒 Locked';
+        statusEl.style.color = 'var(--rose-500)';
+        btn.disabled = true;
+        btn.style.opacity = '0.55';
+        btn.style.pointerEvents = 'none';
+    }
 }
 
 // ============================================================
