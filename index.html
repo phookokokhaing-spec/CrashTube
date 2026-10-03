@@ -6387,6 +6387,11 @@ background: linear-gradient(
                 <div class="admin-section">
                     <h4><i class="fas fa-power-off"></i> Exchange Control</h4>
                     <button class="btn-sm mint" id="toggleExchangeBtn" style="width:100%;" onclick="adminToggleExchange()">🔓 Exchange Open</button>
+                    <div class="admin-row" style="margin-top:8px;">
+                        <input type="date" id="adminExchangeDate" />
+                        <button class="btn-sm mint" onclick="adminSetExchangeDate()">Set</button>
+                    </div>
+                    <div class="admin-hint">Exchange Open Date: <span id="currentExchangeDateDisplay">---</span></div>
                     <div class="admin-hint">Status: <span id="exchangeStatusDisplay" style="color:var(--mint-600);font-weight:800;">OPEN</span></div>
                 </div>
                 
@@ -6898,6 +6903,7 @@ let exchangeRate = 3000; // legacy USD→Coin setting
 let mmkRate = 0; // legacy USD→MMK setting
 let coinMmkRate = 0; // MMK value for 10,000 Coins (admin controlled)
 let isExchangeOpen = true;
+let exchangeOpenDate = null;
 let isUpdatingCoins = false;
 let isAdPlaying = false;
 let adCardTimers = {};
@@ -7803,6 +7809,7 @@ async function loadExchangeRate() {
             mmkRate = cached.mmkRate || 0;
             coinMmkRate = Number(cached.coinMmkRate) || ((mmkRate > 0 && exchangeRate > 0) ? (mmkRate / exchangeRate) * 10000 : 0);
             isExchangeOpen = cached.isExchangeOpen !== false;
+            exchangeOpenDate = cached.openDate || null;
             AD_REWARD = cached.adReward || 30;
             VIDEO_REWARD = AD_REWARD;
             AD_CARDS.forEach(c => c.reward = AD_REWARD);
@@ -7826,10 +7833,11 @@ async function loadExchangeRate() {
             mmkRate = data.mmkRate || 0;
             coinMmkRate = Number(data.coinMmkRate) || ((mmkRate > 0 && exchangeRate > 0) ? (mmkRate / exchangeRate) * 10000 : 0);
             isExchangeOpen = data.isExchangeOpen !== false;
+        exchangeOpenDate = data.openDate || null;
             AD_REWARD = Number(data.adReward) > 0 ? Number(data.adReward) : 30;
             VIDEO_REWARD = AD_REWARD;
             localStorage.setItem(cacheKey, JSON.stringify({
-                rate: exchangeRate, mmkRate, coinMmkRate, isExchangeOpen, adReward: AD_REWARD, timestamp: Date.now()
+                rate: exchangeRate, mmkRate, coinMmkRate, isExchangeOpen, openDate: exchangeOpenDate, adReward: AD_REWARD, timestamp: Date.now()
             }));
         } else {
             await db.collection('settings').doc('exchangeRate').set({
@@ -7873,13 +7881,60 @@ function updateExchangeRateUI() {
     if (adminCoinMmk) adminCoinMmk.value = directRate > 0 ? directRate : '';
 }
 
+function isExchangeDateOpen() {
+    if (!exchangeOpenDate) return true;
+
+    const today = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Yangon'
+    }).format(new Date());
+
+    return today >= exchangeOpenDate;
+}
+
+async function adminSetExchangeDate() {
+    const date = document.getElementById('adminExchangeDate').value;
+    if (!date) return;
+
+    exchangeOpenDate = date;
+    isExchangeOpen = true;
+
+    try {
+        await db.collection('settings').doc('exchangeRate').set({
+            openDate: date,
+            rate: exchangeRate,
+            mmkRate,
+            coinMmkRate,
+            isExchangeOpen,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+
+        localStorage.removeItem('cachedExchangeRate');
+
+        const display = document.getElementById('currentExchangeDateDisplay');
+        if (display) display.textContent = date;
+
+        updateExchangeStatusUI();
+        showToast('✅ Exchange Date Set: ' + date);
+    } catch (e) {
+        console.error('adminSetExchangeDate:', e);
+        showToast('❌ Exchange Date Save Failed', 'error');
+    }
+}
+
 function updateExchangeStatusUI() {
     const statusDisplay = document.getElementById('exchangeStatusDisplay');
+    const dateInput = document.getElementById('adminExchangeDate');
+    const dateDisplay = document.getElementById('currentExchangeDateDisplay');
+    if (dateInput && exchangeOpenDate) dateInput.value = exchangeOpenDate;
+    if (dateDisplay) dateDisplay.textContent = exchangeOpenDate || '---';
+
     const toggleBtn = document.getElementById('toggleExchangeBtn');
     const lockedMsg = document.getElementById('exchangeLockedMsg');
     const lockedNotice = document.getElementById('exchangeLockedNotice');
     const confirmBtn = document.getElementById('exchangeConfirmBtn');
-    if (isExchangeOpen) {
+    const exchangeActuallyOpen = isExchangeOpen && isExchangeDateOpen();
+
+    if (exchangeActuallyOpen) {
         if (statusDisplay) { statusDisplay.textContent = 'OPEN'; statusDisplay.style.color = 'var(--mint-600)'; }
         if (toggleBtn) { toggleBtn.textContent = '🔓 Exchange Open'; toggleBtn.style.background = 'linear-gradient(135deg, var(--mint-500), var(--mint-700))'; toggleBtn.style.color = '#fff'; }
         if (lockedMsg) lockedMsg.classList.remove('show');
@@ -7966,7 +8021,7 @@ async function adminToggleExchange() {
     showToast(isExchangeOpen ? '✅ Opened' : '🔒 Closed');
 }
 function openExchangeFromMarket() {
-    if (!isExchangeOpen) { showToast('🔒 ပိတ်ထားသည်', 'warning'); return; }
+    if (!(isExchangeOpen && isExchangeDateOpen())) { showToast('🔒 Exchange ပိတ်ထားပါသည်', 'warning'); return; }
     openModal('exchangeModal');
 }
 function setExchangeAmount(val) { document.getElementById('exchangeInput').value = val; calculateExchange(); }
@@ -7983,7 +8038,7 @@ function calculateExchange() {
 
 async function confirmExchange() {
     if (!currentUser) { showToast('❌ Please login', 'error'); return; }
-    if (!isExchangeOpen) { showToast('🔒 ပိတ်ထားသည်', 'error'); return; }
+    if (!(isExchangeOpen && isExchangeDateOpen())) { showToast('🔒 Exchange ပိတ်ထားပါသည်', 'error'); return; }
     if (!coinMmkRate || coinMmkRate <= 0) { showToast('❌ Admin မှ 10,000 Coin = MMK Rate သတ်မှတ်ပေးရန်လိုသည်', 'error'); return; }
     if (!acquireCoinLock()) { showToast('⏳ Please wait...', 'warning'); return; }
 
