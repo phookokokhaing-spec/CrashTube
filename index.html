@@ -6236,7 +6236,7 @@ background: linear-gradient(
                 <input type="tel" id="withdrawPhone" placeholder="ထုတ်ယူမည့်ဖုန်းနံပါတ်" />
                 <input type="number" id="withdrawAmount" placeholder="MMK ပမာဏ" min="1" />
                 <div class="withdraw-balance-hint">လက်ကျန်: <span id="withdrawBalanceMmk">0 MMK</span></div>
-                <button class="btn-primary" id="withdrawBtn" disabled onclick="requestWithdraw()">ထုတ်ယူမည်</button>
+                <button class="btn-primary" id="withdrawBtn" onclick="requestWithdraw()">ထုတ်ယူမည်</button>
             </div>
         </div>
     </div>
@@ -7796,16 +7796,16 @@ function updateWithdrawUI() {
     if (isWithdrawOpen) {
         statusEl.textContent = '✅ Open';
         statusEl.style.color = 'var(--mint-600)';
-        btn.disabled = false;
-        btn.style.opacity = '1';
-        btn.style.pointerEvents = 'auto';
     } else {
         statusEl.textContent = '🔒 Locked';
         statusEl.style.color = 'var(--rose-500)';
-        btn.disabled = true;
-        btn.style.opacity = '0.55';
-        btn.style.pointerEvents = 'none';
     }
+
+    // Keep Withdraw button clickable.
+    // requestWithdraw() will check whether Withdraw is open.
+    btn.disabled = false;
+    btn.style.opacity = '1';
+    btn.style.pointerEvents = 'auto';
 }
 
 // ============================================================
