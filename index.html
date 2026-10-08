@@ -8827,6 +8827,13 @@ auth.onAuthStateChanged(async (user) => {
                 userData.claimedLevels = data.claimedLevels || [];
                 userData.unlockedAch = data.unlockedAch || [];
                 userData.claimedAch = data.claimedAch || [];
+
+                // Premium Profile Frame persistence
+                userData.profileFrames = Array.isArray(data.profileFrames)
+                    ? data.profileFrames
+                    : [];
+                userData.profileFrame = data.profileFrame || 'none';
+                applyProfileFrame(userData.profileFrame);
                 if (!data.refCode) {
                     await db.collection('users').doc(user.uid).update({ refCode: userData.refCode });
                 }
