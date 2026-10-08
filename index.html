@@ -6197,6 +6197,52 @@ background: linear-gradient(
         </section>
 
         <!-- ============================================ -->
+
+        <!-- COIN GIFT - USER DASHBOARD -->
+        <section class="section-block" id="coinGiftSection">
+            <div class="section-header-row">
+                <div class="section-title-block">
+                    <i class="fas fa-gift"></i> Coin Gift
+                </div>
+            </div>
+
+            <div style="background:var(--bg-card,#10142b);border:1px solid var(--border-light,rgba(139,92,246,.2));border-radius:16px;padding:14px;">
+                <div style="font-size:12px;color:var(--text-2,#b9b7d6);margin-bottom:12px;">
+                    သူငယ်ချင်းရဲ့ Register လုပ်ထားတဲ့ Email နဲ့ Coin ပို့နိုင်ပါတယ်။
+                    <br>ဝန်ဆောင်ခ: <strong style="color:var(--mint-300,#22d3ee);">20 Coin</strong>
+                </div>
+
+                <input
+                    type="email"
+                    id="giftReceiverEmail"
+                    placeholder="လက်ခံသူ Email"
+                    autocomplete="email"
+                    style="display:block;width:100%;box-sizing:border-box;margin-bottom:10px;padding:12px;border-radius:10px;background:var(--bg-elevated,#171b38);color:var(--text-1,#f5f3ff);border:1px solid var(--border-light,rgba(139,92,246,.2));"
+                />
+
+                <input
+                    type="number"
+                    id="giftAmount"
+                    placeholder="ပို့မည့် Coin ပမာဏ"
+                    min="1"
+                    step="1"
+                    inputmode="numeric"
+                    style="display:block;width:100%;box-sizing:border-box;margin-bottom:10px;padding:12px;border-radius:10px;background:var(--bg-elevated,#171b38);color:var(--text-1,#f5f3ff);border:1px solid var(--border-light,rgba(139,92,246,.2));"
+                />
+
+                <button
+                    class="btn-sm mint"
+                    onclick="sendCoinGift()"
+                    style="width:100%;margin-top:2px;padding:12px;"
+                >
+                    <i class="fas fa-paper-plane"></i> Coin ပို့မည် (Fee 20 Coin)
+                </button>
+
+                <div id="giftMsg" role="status" aria-live="polite"
+                     style="font-size:12px;margin-top:8px;overflow-wrap:anywhere;"></div>
+            </div>
+        </section>
+
         <!-- AD TASKS - Horizontal Cards -->
         <!-- ============================================ -->
         <section class="section-block" id="adsSection">
