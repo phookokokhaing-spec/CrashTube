@@ -8638,6 +8638,29 @@ async function requestWithdraw() {
     }
 }
 
+function toggleAuth(mode) {
+    const loginForm = document.getElementById('loginForm');
+    const signupForm = document.getElementById('signupForm');
+    const authError = document.getElementById('authError');
+
+    if (!loginForm || !signupForm) {
+        console.error('Auth form not found');
+        return;
+    }
+
+    const isSignup = mode === 'signup';
+
+    loginForm.style.display = isSignup ? 'none' : '';
+    signupForm.style.display = isSignup ? '' : 'none';
+
+    if (authError) {
+        authError.textContent = '';
+        authError.classList.remove('show');
+    }
+}
+
+window.toggleAuth = toggleAuth;
+
 function showAuthError(msg) {
     const el = document.getElementById('authError');
     el.textContent = msg;
@@ -8872,7 +8895,23 @@ auth.onAuthStateChanged(async (user) => {
             if (doc.exists) {
                 const d = doc.data();
                 const pendingLive = getPendingAdRewards();
-                userData.coins = (d.coins || 0) + (pendingLive.coins || 0);
+                const _oldShownCoins = Number(userData.coins) || 0;
+                const _serverCoins = Number(d.coins) || 0;
+                const _pendingCoins = Number(pendingLive.coins) || 0;
+                const _shownCoins = _serverCoins + _pendingCoins;
+
+                console.log(
+                    '💰 COIN SNAPSHOT | OLD=' + _oldShownCoins +
+                    ' | SERVER=' + _serverCoins +
+                    ' | PENDING=' + _pendingCoins +
+                    ' | SHOWN=' + _shownCoins +
+                    ' | DIFF=' + (_shownCoins - _oldShownCoins) +
+                    ' | CACHE=' + (doc.metadata ? doc.metadata.fromCache : 'unknown') +
+                    ' | PENDING_WRITES=' + (doc.metadata ? doc.metadata.hasPendingWrites : 'unknown') +
+                    ' | TIME=' + new Date().toISOString()
+                );
+
+                userData.coins = _shownCoins;
                 userData.usdt = d.usdt || 0;
                 userData.mmkBalance = Number(d.mmkBalance) || 0;
                 userData.totalAds = (d.totalAds || 0) + (pendingLive.count || 0);
@@ -9788,6 +9827,14 @@ async function sendCoinGift() {
     }
 }
 
+// ============================================================
+//  COIN DEBUG TEST
+// ============================================================
+console.log('🟢 CASH TUBE COIN DEBUG FILE LOADED', {
+    time: new Date().toISOString(),
+    page: window.location.href
+});
+// ============================================================
 // ============================================================
 //  INIT
 // ============================================================
