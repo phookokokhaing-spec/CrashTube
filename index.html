@@ -5437,6 +5437,378 @@ background: linear-gradient(
     margin:4px 0 10px;
 }
 </style>
+
+<style>
+/* ============================================================
+   PREMIUM PROFILE FRAMES
+   ============================================================ */
+.profile-frame-wrap{
+    --frame-a:#38bdf8; --frame-b:#8b5cf6; --frame-glow:rgba(56,189,248,.45);
+    position:relative; width:104px; height:104px; margin:4px auto 18px;
+    display:grid; place-items:center; border-radius:50%;
+    isolation:isolate;
+}
+.profile-frame-wrap::before{
+    content:""; position:absolute; inset:-5px; border-radius:50%;
+    padding:4px;
+    background:conic-gradient(from 0deg,var(--frame-a),var(--frame-b),#fff,var(--frame-a));
+    -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+    -webkit-mask-composite:xor; mask-composite:exclude;
+    filter:drop-shadow(0 0 10px var(--frame-glow));
+    animation:profileFrameRotate 5s linear infinite;
+}
+.profile-frame-wrap::after{
+    content:""; position:absolute; inset:-9px; border-radius:50%;
+    border:1px solid var(--frame-glow); box-shadow:0 0 22px var(--frame-glow);
+    pointer-events:none;
+}
+.profile-frame-wrap img{
+    position:relative; z-index:2; width:82px; height:82px; object-fit:cover;
+    border-radius:50%; border:3px solid rgba(255,255,255,.9);
+    box-shadow:0 8px 24px rgba(0,0,0,.32);
+}
+.profile-frame-wrap.frame-none::before,
+.profile-frame-wrap.frame-none::after{display:none}
+.profile-frame-wrap.frame-none img{border-color:rgba(255,255,255,.25)}
+
+.frame-aurora{--frame-a:#22d3ee;--frame-b:#8b5cf6;--frame-glow:rgba(34,211,238,.55)}
+.frame-royal{--frame-a:#fbbf24;--frame-b:#8b5cf6;--frame-glow:rgba(251,191,36,.55)}
+.frame-rose{--frame-a:#fb7185;--frame-b:#f0abfc;--frame-glow:rgba(251,113,133,.5)}
+.frame-neon{--frame-a:#39ff14;--frame-b:#00e5ff;--frame-glow:rgba(57,255,20,.5)}
+.frame-ocean{--frame-a:#2563eb;--frame-b:#14b8a6;--frame-glow:rgba(37,99,235,.5)}
+.frame-gold{--frame-a:#fde68a;--frame-b:#f59e0b;--frame-glow:rgba(245,158,11,.6)}
+.frame-diamond{--frame-a:#e0f2fe;--frame-b:#c4b5fd;--frame-glow:rgba(224,242,254,.65)}
+.frame-cosmic{--frame-a:#c026d3;--frame-b:#4f46e5;--frame-glow:rgba(192,38,211,.55)}
+@keyframes profileFrameRotate{to{transform:rotate(360deg)}}
+
+.frame-shop{
+    display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:10px;
+}
+.frame-card{
+    position:relative;border:1px solid rgba(148,163,184,.18);border-radius:18px;
+    padding:12px 8px;background:linear-gradient(145deg,rgba(255,255,255,.075),rgba(255,255,255,.025));
+    text-align:center;cursor:pointer;transition:.2s;overflow:hidden;
+}
+.frame-card:hover{transform:translateY(-2px);border-color:rgba(96,165,250,.55);box-shadow:0 10px 26px rgba(0,0,0,.2)}
+.frame-preview{width:62px;height:62px;margin:2px auto 8px;display:grid;place-items:center}
+.frame-preview .profile-frame-wrap{width:58px;height:58px;margin:0}
+.frame-preview .profile-frame-wrap img{width:44px;height:44px;border-width:2px}
+.frame-card h5{margin:0;font-size:12px}
+.frame-card small{display:block;margin-top:3px;opacity:.72;font-size:10px}
+.frame-card button{
+    width:100%;margin-top:8px;border:0;border-radius:10px;padding:8px 6px;
+    color:#fff;background:linear-gradient(135deg,#2563eb,#7c3aed);font-size:11px;font-weight:800;
+}
+.frame-card.equipped{border-color:#22c55e;box-shadow:0 0 0 1px rgba(34,197,94,.2),0 10px 28px rgba(34,197,94,.12)}
+.frame-card.equipped button{background:linear-gradient(135deg,#16a34a,#22c55e)}
+.frame-balance{
+    display:flex;justify-content:space-between;align-items:center;gap:8px;
+    padding:10px 12px;border-radius:14px;margin-top:10px;
+    background:rgba(15,23,42,.45);border:1px solid rgba(148,163,184,.12);font-size:12px;
+}
+.frame-section-title{margin:14px 0 5px;font-size:13px;font-weight:800;letter-spacing:.3px}
+.frame-note{font-size:10px;opacity:.62;line-height:1.5;margin-top:6px}
+
+</style>
+
+<style id="premium-frame-style">
+/* ===== CASH TUBE PREMIUM PROFILE FRAMES ===== */
+
+.profile-frame-wrap{
+    position:relative;
+    width:92px;
+    height:92px;
+    border-radius:50%;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    isolation:isolate;
+    transition:transform .25s ease,filter .25s ease;
+}
+
+.profile-frame-wrap:hover{
+    transform:scale(1.04);
+}
+
+.profile-frame-wrap img{
+    width:78px;
+    height:78px;
+    border-radius:50%;
+    object-fit:cover;
+    position:relative;
+    z-index:2;
+    border:3px solid rgba(255,255,255,.92);
+    box-shadow:0 5px 18px rgba(0,0,0,.45);
+}
+
+/* Aurora */
+.profile-frame-wrap.frame-aurora::before,
+.profile-frame-wrap.frame-royal::before,
+.profile-frame-wrap.frame-rose::before,
+.profile-frame-wrap.frame-neon::before{
+    content:"";
+    position:absolute;
+    inset:-6px;
+    border-radius:50%;
+    z-index:0;
+}
+
+.profile-frame-wrap.frame-aurora::after,
+.profile-frame-wrap.frame-royal::after,
+.profile-frame-wrap.frame-rose::after,
+.profile-frame-wrap.frame-neon::after{
+    content:"";
+    position:absolute;
+    inset:-11px;
+    border-radius:50%;
+    z-index:-1;
+    filter:blur(7px);
+}
+
+/* Aurora */
+.profile-frame-wrap.frame-aurora::before{
+    background:conic-gradient(
+        #22d3ee,
+        #8b5cf6,
+        #ec4899,
+        #22c55e,
+        #22d3ee
+    );
+    box-shadow:
+        0 0 10px #22d3ee,
+        0 0 25px rgba(139,92,246,.8);
+    animation:premiumFrameRotate 5s linear infinite;
+}
+.profile-frame-wrap.frame-aurora::after{
+    background:#8b5cf6;
+    opacity:.65;
+}
+
+/* Royal */
+.profile-frame-wrap.frame-royal::before{
+    background:conic-gradient(
+        #fff7ad,
+        #f59e0b,
+        #fde68a,
+        #b45309,
+        #fff7ad
+    );
+    box-shadow:
+        0 0 10px rgba(245,158,11,.9),
+        0 0 28px rgba(251,191,36,.65);
+}
+.profile-frame-wrap.frame-royal::after{
+    background:#f59e0b;
+    opacity:.65;
+}
+
+/* Rose */
+.profile-frame-wrap.frame-rose::before{
+    background:conic-gradient(
+        #fb7185,
+        #f9a8d4,
+        #c084fc,
+        #f43f5e,
+        #fb7185
+    );
+    box-shadow:
+        0 0 10px rgba(251,113,133,.9),
+        0 0 28px rgba(192,132,252,.65);
+    animation:premiumFramePulse 2.5s ease-in-out infinite;
+}
+.profile-frame-wrap.frame-rose::after{
+    background:#fb7185;
+    opacity:.6;
+}
+
+/* Neon */
+.profile-frame-wrap.frame-neon::before{
+    background:conic-gradient(
+        #39ff14,
+        #00e5ff,
+        #2563eb,
+        #a855f7,
+        #39ff14
+    );
+    box-shadow:
+        0 0 9px #39ff14,
+        0 0 20px #00e5ff,
+        0 0 35px rgba(168,85,247,.6);
+    animation:premiumFrameRotate 3s linear infinite;
+}
+.profile-frame-wrap.frame-neon::after{
+    background:#00e5ff;
+    opacity:.7;
+}
+
+/* Shop */
+.frame-card{
+    position:relative;
+    overflow:hidden;
+    border-radius:20px;
+    padding:15px;
+    background:
+        linear-gradient(145deg,
+            rgba(30,41,59,.96),
+            rgba(15,23,42,.98));
+    border:1px solid rgba(255,255,255,.11);
+    box-shadow:
+        0 12px 30px rgba(0,0,0,.25),
+        inset 0 1px 0 rgba(255,255,255,.08);
+    transition:
+        transform .25s ease,
+        box-shadow .25s ease,
+        border-color .25s ease;
+}
+
+.frame-card:hover{
+    transform:translateY(-4px);
+    border-color:rgba(129,140,248,.45);
+    box-shadow:
+        0 18px 38px rgba(0,0,0,.35),
+        0 0 25px rgba(99,102,241,.18);
+}
+
+.frame-card.equipped{
+    border-color:rgba(250,204,21,.75);
+    box-shadow:
+        0 0 0 1px rgba(250,204,21,.2),
+        0 15px 38px rgba(0,0,0,.3),
+        0 0 30px rgba(250,204,21,.2);
+}
+
+.frame-preview{
+    min-height:118px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+}
+
+.frame-card button{
+    width:100%;
+    margin-top:10px;
+    border:0;
+    border-radius:12px;
+    padding:10px;
+    font-weight:800;
+    cursor:pointer;
+    background:linear-gradient(135deg,#6366f1,#8b5cf6);
+    color:#fff;
+    box-shadow:0 7px 18px rgba(99,102,241,.28);
+}
+
+.frame-card button:hover{
+    filter:brightness(1.1);
+    transform:translateY(-1px);
+}
+
+@keyframes premiumFrameRotate{
+    to{transform:rotate(360deg);}
+}
+
+@keyframes premiumFramePulse{
+    0%,100%{transform:scale(.98);opacity:.65}
+    50%{transform:scale(1.03);opacity:1}
+}
+</style>
+
+
+<style id="withdrawal-receipt-style">
+.withdrawal-receipt-overlay{
+    position:fixed;
+    inset:0;
+    z-index:99999;
+    display:none;
+    align-items:center;
+    justify-content:center;
+    padding:18px;
+    background:rgba(2,6,23,.78);
+    backdrop-filter:blur(8px);
+}
+
+.withdrawal-receipt-overlay.show{
+    display:flex;
+}
+
+.withdrawal-receipt{
+    width:min(430px,100%);
+    max-height:90vh;
+    overflow:auto;
+    border-radius:24px;
+    padding:20px;
+    color:#fff;
+    background:
+        linear-gradient(145deg,#1e293b,#0f172a);
+    border:1px solid rgba(255,255,255,.12);
+    box-shadow:
+        0 25px 70px rgba(0,0,0,.55),
+        0 0 35px rgba(99,102,241,.18);
+}
+
+.receipt-brand{
+    text-align:center;
+    padding-bottom:15px;
+    border-bottom:1px dashed rgba(255,255,255,.18);
+}
+
+.receipt-icon{
+    font-size:30px;
+}
+
+.receipt-title{
+    font-size:20px;
+    font-weight:900;
+    margin-top:3px;
+}
+
+.receipt-number{
+    display:inline-block;
+    margin-top:7px;
+    padding:6px 11px;
+    border-radius:999px;
+    background:rgba(99,102,241,.16);
+    color:#c4b5fd;
+    font-size:11px;
+    font-weight:800;
+}
+
+.receipt-line{
+    display:flex;
+    justify-content:space-between;
+    gap:12px;
+    padding:11px 0;
+    border-bottom:1px solid rgba(255,255,255,.06);
+    font-size:12px;
+}
+
+.receipt-line span:first-child{
+    opacity:.62;
+}
+
+.receipt-line strong{
+    text-align:right;
+}
+
+.receipt-status{
+    display:inline-block;
+    padding:5px 10px;
+    border-radius:999px;
+    background:rgba(245,158,11,.13);
+    color:#fbbf24;
+}
+
+.receipt-close-btn{
+    width:100%;
+    margin-top:15px;
+    padding:11px;
+    border:0;
+    border-radius:12px;
+    background:rgba(255,255,255,.09);
+    color:#fff;
+    font-weight:800;
+}
+</style>
+
 </head>
 <body>
 
@@ -6039,45 +6411,73 @@ background: linear-gradient(
     <!-- ============================================================ -->
     <!-- PROFILE MODAL -->
     <!-- ============================================================ -->
+
     <div id="profileModal" class="modal">
         <div class="modal-content">
             <button class="modal-close" onclick="closeModal('profileModal')">&times;</button>
-            <h3><i class="fas fa-user"></i> Profile</h3>
+
+            <h3>
+                <i class="fas fa-user-astronaut"></i> Profile
+            </h3>
+
             <div class="profile-pic">
-                <img id="profileImg" src="https://ui-avatars.com/api/?name=User&background=3b82f6&color=fff&size=90" alt="Profile" />
-                <input type="file" id="profileUpload" accept="image/*" onchange="uploadProfileImg(event)" />
+                <div id="profileFrameWrap" class="profile-frame-wrap frame-none">
+                    <img id="profileImg"
+                         src="https://ui-avatars.com/api/?name=User&background=3b82f6&color=fff&size=100"
+                         alt="Profile">
+                </div>
+
+                <input type="file"
+                       accept="image/*"
+                       onchange="uploadProfileImg(event)">
             </div>
-            <label>အသုံးပြုသူအမည်</label>
-            <input type="text" id="profileName" placeholder="User Name" onchange="updateProfile()" />
-            <label>Email</label>
-            <input type="email" id="profileEmail" disabled />
+
             <div class="stat-row">
-                <div class="stat-card coin">
-                    <div class="s-label">🪙 Coins</div>
-                    <div class="s-value" id="profileCoins">0</div>
+                <div class="stat-card">
+                    <div class="stat-label">🪙 Coins</div>
+                    <div class="stat-value" id="profileCoins">0</div>
                 </div>
-                <div class="stat-card usdt">
-                    <div class="s-label">💰 MMK</div>
-                    <div class="s-value" id="profileUsdt">0 MMK</div>
+
+                <div class="stat-card">
+                    <div class="stat-label">💵 Balance</div>
+                    <div class="stat-value" id="profileUsdt">0 MMK</div>
                 </div>
             </div>
-            <div class="admin-section">
-                <h4><i class="fas fa-gift"></i> Coin Gift ပို့ရန်</h4>
-                <div style="display:flex;gap:6px;flex-wrap:wrap;">
-                    <input type="email" id="giftReceiverEmail" placeholder="Email" style="flex:2;min-width:100px;" />
-                    <input type="number" id="giftAmount" placeholder="ပမာဏ" style="flex:1;min-width:60px;" />
-                </div>
-                <button class="btn-sm mint" onclick="sendCoinGift()" style="width:100%;margin-top:8px;padding:12px;">
-                    <i class="fas fa-paper-plane"></i> ပို့မည် (Fee 20 Coin)
-                </button>
-                <div id="giftMsg" style="font-size:11px;margin-top:6px;"></div>
+
+            <div class="profile-form">
+                <label>Username</label>
+                <input type="text"
+                       id="profileName"
+                       placeholder="Enter username">
+
+                <label>Email</label>
+                <input type="text"
+                       id="profileEmail"
+                       readonly>
             </div>
-            <button class="btn-primary" onclick="closeModal('profileModal'); openModal('refModal');" style="margin-top:10px;">
-                <i class="fas fa-users"></i> Refer & Earn +500
+
+            <button class="primary-btn"
+                    onclick="updateProfile()"
+                    style="width:100%;margin-top:12px;">
+                <i class="fas fa-save"></i> Save Profile
             </button>
-            <button class="btn-primary btn-outline" onclick="openHistoryModal()" style="margin-top:10px;">
-                <i class="fas fa-history"></i> Transaction History
-            </button>
+
+            <div class="profile-frame-shop-section" style="margin-top:22px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                    <h4 style="margin:0;">
+                        ✨ Premium Profile Frames
+                    </h4>
+                    <span id="frameShopCoins">0</span> 🪙
+                </div>
+
+                <div id="frameShop" class="frame-shop"></div>
+            </div>
+        </div>
+    </div>
+
+    
+            </div>
+            
         </div>
     </div>
 
@@ -6237,6 +6637,12 @@ background: linear-gradient(
                 <input type="number" id="withdrawAmount" placeholder="MMK ပမာဏ" min="1" />
                 <div class="withdraw-balance-hint">လက်ကျန်: <span id="withdrawBalanceMmk">0 MMK</span></div>
                 <button class="btn-primary" id="withdrawBtn" onclick="requestWithdraw()">ထုတ်ယူမည်</button>
+                <button type="button"
+                        class="receipt-latest-btn"
+                        onclick="openLatestWithdrawalReceipt()"
+                        style="width:100%;margin-top:9px;border:1px solid rgba(129,140,248,.3);border-radius:12px;padding:10px;background:rgba(99,102,241,.10);color:#c4b5fd;font-weight:800;">
+                    🧾 နောက်ဆုံး Withdrawal Receipt
+                </button>
             </div>
         </div>
     </div>
@@ -6470,7 +6876,24 @@ background: linear-gradient(
     </div>
 
     <script>
-    // ============================================================
+
+/* ============================================================
+   CASH TUBE CORE CONFIG — SAFE INITIALIZATION ORDER
+   ============================================================ */
+const PROFILE_FRAMES = [
+    {id:'aurora', name:'Aurora', cls:'frame-aurora', price:300, icon:'🌌'},
+    {id:'royal', name:'Royal', cls:'frame-royal', price:300, icon:'👑'},
+    {id:'rose', name:'Rose Glow', cls:'frame-rose', price:300, icon:'🌹'},
+    {id:'neon', name:'Neon', cls:'frame-neon', price:300, icon:'⚡'},
+    {id:'ocean', name:'Ocean', cls:'frame-ocean', price:300, icon:'🌊'},
+    {id:'gold', name:'Gold', cls:'frame-gold', price:300, icon:'✨'},
+    {id:'diamond', name:'Diamond', cls:'frame-diamond', price:300, icon:'💎'},
+    {id:'cosmic', name:'Cosmic', cls:'frame-cosmic', price:300, icon:'🪐'}
+];
+
+var VIDEO_REWARD = 30;
+
+// ============================================================
 //  SIDE DRAWER FUNCTIONS
 // ============================================================
 function openDrawer() {
@@ -7755,14 +8178,16 @@ async function claimDailyBonus() {
 //  UI UPDATE
 // ============================================================
 function updateUI() {
+    userData.profileFrames = Array.isArray(userData.profileFrames) ? userData.profileFrames : [];
+    userData.profileFrame = userData.profileFrame || 'none';
     const coins = userData.coins || 0;
     const mmk = Math.max(0, Number(userData.mmkBalance || 0));
     const username = userData.username || 'User';
     document.getElementById('totalCoins').textContent = coins;
-    document.getElementById('profileCoins').textContent = coins;
-    document.getElementById('profileUsdt').textContent = mmk.toLocaleString() + ' MMK';
-    document.getElementById('profileName').value = username;
-    document.getElementById('profileEmail').value = userData.email || '';
+    if (document.getElementById('profileCoins')) document.getElementById('profileCoins').textContent = coins;
+    if (document.getElementById('profileUsdt')) document.getElementById('profileUsdt').textContent = mmk.toLocaleString() + ' MMK';
+    if (document.getElementById('profileName')) document.getElementById('profileName').value = username;
+    if (document.getElementById('profileEmail')) document.getElementById('profileEmail').value = userData.email || '';
     document.getElementById('marketUsdt').textContent = mmk.toLocaleString() + ' MMK';
     document.getElementById('exchangeCoins').textContent = coins;
     document.getElementById('headerUsdt').textContent = mmk.toLocaleString() + ' MMK';
@@ -7771,9 +8196,13 @@ function updateUI() {
 
     const avatar = 'https://ui-avatars.com/api/?name=' + encodeURIComponent(username) + '&background=3b82f6&color=fff&size=72';
     const savedImg = localStorage.getItem('profileImg');
-    document.getElementById('profileImg').src = savedImg || avatar;
-    if (document.getElementById('headerAvatar')) document.getElementById('headerAvatar').src = savedImg || avatar;
-    if (document.getElementById('drawerAvatar')) document.getElementById('drawerAvatar').src = savedImg || avatar;
+    const profileSrc = savedImg || avatar;
+    if (document.getElementById('profileImg')) document.getElementById('profileImg').src = profileSrc;
+    if (document.getElementById('headerAvatar')) document.getElementById('headerAvatar').src = profileSrc;
+    if (document.getElementById('drawerAvatar')) document.getElementById('drawerAvatar').src = profileSrc;
+    applyProfileFrame(userData.profileFrame || 'none');
+    if (document.getElementById('frameShopCoins')) document.getElementById('frameShopCoins').textContent = coins;
+    renderFrameShop();
     if (document.getElementById('drawerUsername')) document.getElementById('drawerUsername').textContent = username;
     if (document.getElementById('drawerEmail')) document.getElementById('drawerEmail').textContent = userData.email || 'user@email.com';
     if (document.getElementById('drawerCoins')) document.getElementById('drawerCoins').textContent = coins;
@@ -8113,20 +8542,43 @@ async function requestWithdraw() {
     if (!accountName) { showToast('❌ Username / အကောင့်အမည် ဖြည့်ပါ', 'error'); return; }
     if (!phone) { showToast('❌ ဖုန်းနံပါတ် ဖြည့်ပါ', 'error'); return; }
     if (!amount || amount < MIN_WITHDRAW_MMK) {
-        showToast(`❌ အနည်းဆုံး ${MIN_WITHDRAW_MMK.toLocaleString()} MMK`, 'error'); return;
+        showToast(`❌ အနည်းဆုံး ${MIN_WITHDRAW_MMK.toLocaleString()} MMK`, 'error');
+        return;
     }
-    if (amount > (userData.mmkBalance || 0)) { showToast('❌ MMK လက်ကျန်မလုံလောက်ပါ', 'error'); return; }
+    if (amount > (userData.mmkBalance || 0)) {
+        showToast('❌ MMK လက်ကျန်မလုံလောက်ပါ', 'error');
+        return;
+    }
 
     try {
         const userRef = db.collection('users').doc(currentUser.uid);
         const reqRef = db.collection('withdrawals').doc();
+
+        // Unique receipt number
+        const receiptNo =
+            'CT-' +
+            getReceiptDateKey() +
+            '-' +
+            reqRef.id.slice(-8).toUpperCase();
+
         const result = await db.runTransaction(async (tx) => {
             const snap = await tx.get(userRef);
-            if (!snap.exists) throw new Error('USER_NOT_FOUND');
+
+            if (!snap.exists) {
+                throw new Error('USER_NOT_FOUND');
+            }
+
             const d = snap.data() || {};
             const balance = Math.max(0, Number(d.mmkBalance) || 0);
-            if (balance < amount) throw new Error('INSUFFICIENT_MMK');
-            tx.update(userRef, { mmkBalance: balance - amount });
+
+            if (balance < amount) {
+                throw new Error('INSUFFICIENT_MMK');
+            }
+
+            tx.update(userRef, {
+                mmkBalance: balance - amount
+            });
+
             tx.set(reqRef, {
                 userId: currentUser.uid,
                 authUid: currentUser.uid,
@@ -8137,32 +8589,55 @@ async function requestWithdraw() {
                 method: method,
                 accountName: accountName,
                 phone: phone,
+
+                // Withdrawal Receipt
+                receiptNo: receiptNo,
+
                 status: 'pending',
                 requestedAt: firebase.firestore.FieldValue.serverTimestamp()
             });
-            return balance - amount;
+
+            return {
+                balance: balance - amount,
+                receiptNo: receiptNo,
+                username: d.username || 'User'
+            };
         });
 
-        userData.mmkBalance = result;
+        userData.mmkBalance = result.balance;
         updateUI();
+
         document.getElementById('withdrawAmount').value = '';
         document.getElementById('withdrawMethod').value = '';
         document.getElementById('withdrawAccountName').value = '';
         document.getElementById('withdrawPhone').value = '';
+
+        // Show receipt immediately
+        showWithdrawalReceipt({
+            receiptNo: result.receiptNo,
+            username: result.username,
+            amount: amount,
+            method: method,
+            accountName: accountName,
+            phone: phone,
+            status: 'pending',
+            requestedAt: new Date()
+        });
+
         showToast('✅ ငွေထုတ်ယူရန် Request တင်ပြီးပါပြီ');
+
     } catch (e) {
-        showToast(e.message === 'INSUFFICIENT_MMK' ? '❌ MMK လက်ကျန်မလုံလောက်ပါ' : '❌ Request မတင်နိုင်ပါ', 'error');
+        console.error('requestWithdraw error:', e);
+
+        showToast(
+            e.message === 'INSUFFICIENT_MMK'
+                ? '❌ MMK လက်ကျန်မလုံလောက်ပါ'
+                : '❌ Request မတင်နိုင်ပါ',
+            'error'
+        );
     }
 }
 
-// ============================================================
-//  AUTH
-// ============================================================
-function toggleAuth(mode) {
-    document.getElementById('loginForm').style.display = mode === 'login' ? 'block' : 'none';
-    document.getElementById('signupForm').style.display = mode === 'signup' ? 'block' : 'none';
-    document.getElementById('authError').classList.remove('show');
-}
 function showAuthError(msg) {
     const el = document.getElementById('authError');
     el.textContent = msg;
@@ -9184,7 +9659,14 @@ if (localStorage.getItem('theme') === 'dark') {
     if (drawerIcon) drawerIcon.className = 'fas fa-sun';
 }
 
-function openModal(id) { document.getElementById(id).classList.add('show'); }
+function openModal(id) {
+    const el = document.getElementById(id);
+    if (!el) {
+        console.warn('Modal not found:', id);
+        return;
+    }
+    el.classList.add('show');
+}
 function closeModal(id) { document.getElementById(id).classList.remove('show'); }
 document.querySelectorAll('.modal').forEach(el => {
     el.addEventListener('click', (e) => { if (e.target === el) el.classList.remove('show'); });
@@ -9209,6 +9691,8 @@ function uploadProfileImg(event) {
         document.getElementById('profileImg').src = e.target.result;
         if (document.getElementById('headerAvatar')) document.getElementById('headerAvatar').src = e.target.result;
         if (document.getElementById('drawerAvatar')) document.getElementById('drawerAvatar').src = e.target.result;
+        applyProfileFrame(userData.profileFrame || 'none');
+        renderFrameShop();
         showToast('✅ Updated');
     };
     reader.readAsDataURL(file);
@@ -9316,7 +9800,7 @@ applyLanguage();
 // ============================================================
 
 const YOUTUBE_API_KEY = 'AIzaSyBmr5WXG46FsqDSSTax8Z9rlnlpQh4oyzI'; // 👈 သင့် key
-let VIDEO_REWARD = 30;
+var VIDEO_REWARD = 30;
 const TARGET_WATCH = 120; // 2 minutes
 const RSS_CACHE_TIME = 30 * 60 * 1000;
 
@@ -10198,9 +10682,337 @@ setTimeout(() => {
     console.log('✅ Digital Market page loaded');
 })();
 
+
+
+
+function getYangonDateKey(){
+    return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Yangon'}).format(new Date());
+}
+function applyProfileFrame(frameId){
+    const wrap = document.getElementById('profileFrameWrap');
+    if (!wrap) return;
+    const frame = PROFILE_FRAMES.find(f=>f.id===frameId);
+    wrap.className = 'profile-frame-wrap ' + (frame ? frame.cls : 'frame-none');
+}
+function renderFrameShop(){
+    const box = document.getElementById('frameShop');
+    if (!box) return;
+    const owned = Array.isArray(userData.profileFrames) ? userData.profileFrames : [];
+    const equipped = userData.profileFrame || 'none';
+    box.innerHTML = PROFILE_FRAMES.map(f=>{
+        const isOwned = owned.includes(f.id);
+        const isEquipped = equipped === f.id;
+        return `<div class="frame-card ${isEquipped?'equipped':''}">
+            <div class="frame-preview">
+                <div class="profile-frame-wrap ${f.cls}">
+                    <img src="${document.getElementById('profileImg')?.src || 'https://ui-avatars.com/api/?name=User&background=3b82f6&color=fff&size=90'}" alt="">
+                </div>
+            </div>
+            <h5>${f.icon} ${f.name}</h5>
+            <small>${f.price} Coin</small>
+            <button onclick="${isOwned ? `equipProfileFrame('${f.id}')` : `buyProfileFrame('${f.id}')`}">
+                ${isEquipped ? '✓ အသုံးပြုနေသည်' : (isOwned ? 'အသုံးပြုမည်' : 'ဝယ်မည် · 300 C')}
+            </button>
+        </div>`;
+    }).join('');
+}
+async function buyProfileFrame(frameId){
+    if (!currentUser) {
+        showToast('❌ Please login','error');
+        return;
+    }
+
+    const frame = PROFILE_FRAMES.find(f => f.id === frameId);
+    if (!frame) return;
+
+    const owned = Array.isArray(userData.profileFrames)
+        ? userData.profileFrames
+        : [];
+
+    if (owned.includes(frameId)) {
+        await equipProfileFrame(frameId);
+        return;
+    }
+
+    const localCoins = Math.max(0, Number(userData.coins) || 0);
+
+    if (localCoins < frame.price) {
+        showToast('❌ Coin မလုံလောက်ပါ','error');
+        return;
+    }
+
+    if (!acquireCoinLock()) return;
+
+    try {
+        const ref = db.collection('users').doc(currentUser.uid);
+
+        /*
+         * 429 FIX
+         * Use a single Firestore update instead of runTransaction.
+         * The local coin check above prevents normal accidental purchases.
+         */
+        const newCoins = localCoins - frame.price;
+        const newOwned = owned.slice();
+        newOwned.push(frameId);
+
+        await ref.update({
+            coins: newCoins,
+            profileFrames: newOwned,
+            profileFrame: frameId
+        });
+
+        userData.coins = newCoins;
+        userData.profileFrames = newOwned;
+        userData.profileFrame = frameId;
+
+        saveCoinsToLocal(newCoins);
+        updateUI();
+        applyProfileFrame(frameId);
+        renderFrameShop();
+
+        /*
+         * Transaction record is optional.
+         * Keep it as a separate non-blocking write so a temporary
+         * Firestore limit does not make the frame purchase look failed.
+         */
+        db.collection('transactions').add({
+            userId: currentUser.uid,
+            type: 'profile_frame_purchase',
+            amount: -frame.price,
+            description: `Purchased ${frame.name} profile frame`,
+            timestamp: firebase.firestore.FieldValue.serverTimestamp()
+        }).catch(e => {
+            console.warn('Frame transaction log skipped:', e);
+        });
+
+        showToast(`✨ ${frame.name} Frame ဝယ်ပြီးပါပြီ`,'success');
+
+    } catch(e) {
+        console.error('❌ PROFILE FRAME PURCHASE FAILED:', e);
+        console.error('Frame ID:', frameId);
+        console.error('Firebase project:', firebaseConfig.projectId);
+        console.error('Current UID:', currentUser ? currentUser.uid : null);
+        console.error('Error code:', e && e.code);
+        console.error('Error message:', e && e.message);
+
+        showToast(
+            e && e.code === 'permission-denied'
+                ? '❌ Frame ဝယ်ခွင့် မရှိပါ'
+                : '❌ Frame ဝယ်ယူမှု မအောင်မြင်ပါ',
+            'error'
+        );
+    } finally {
+        releaseCoinLock();
+    }
+}
+
+async function equipProfileFrame(frameId){
+    if (!currentUser) return;
+    const owned = Array.isArray(userData.profileFrames) ? userData.profileFrames : [];
+    if (!owned.includes(frameId)) return;
+    try{
+        await db.collection('users').doc(currentUser.uid).update({profileFrame:frameId});
+        userData.profileFrame = frameId;
+        applyProfileFrame(frameId);
+        renderFrameShop();
+        showToast('💎 Profile Frame ပြောင်းပြီးပါပြီ','success');
+    }catch(e){ showToast('❌ Frame ပြောင်းမရပါ','error'); }
+}
+
+
+
+
+
+
+
 console.log('✅ Digital Market Exchange loaded');
 console.log('✅ Video Tasks loaded');
 console.log('✅ CASH TUBE Rewards - Orbit Neon UI Loaded');
-    </script>
+    
+
+function getReceiptDateKey(){
+    const d = new Date();
+    const parts = new Intl.DateTimeFormat('en-GB',{
+        timeZone:'Asia/Yangon',
+        year:'numeric',
+        month:'2-digit',
+        day:'2-digit'
+    }).formatToParts(d);
+
+    const get = k => parts.find(x=>x.type===k)?.value || '';
+    return get('year') + get('month') + get('day');
+}
+
+function receiptEscape(value){
+    return String(value ?? '').replace(/[&<>"']/g,function(c){
+        return {
+            '&':'&amp;',
+            '<':'&lt;',
+            '>':'&gt;',
+            '"':'&quot;',
+            "'":'&#039;'
+        }[c];
+    });
+}
+
+function receiptDate(value){
+    if(!value) return '-';
+
+    let d;
+    try{
+        if(typeof value.toDate === 'function') d = value.toDate();
+        else if(value.seconds) d = new Date(value.seconds * 1000);
+        else d = new Date(value);
+
+        return new Intl.DateTimeFormat('en-GB',{
+            timeZone:'Asia/Yangon',
+            year:'numeric',
+            month:'2-digit',
+            day:'2-digit',
+            hour:'2-digit',
+            minute:'2-digit',
+            hour12:true
+        }).format(d);
+    }catch(e){
+        return '-';
+    }
+}
+
+function showWithdrawalReceipt(data){
+    const overlay = document.getElementById('withdrawalReceiptOverlay');
+    const content = document.getElementById('withdrawalReceiptContent');
+
+    if(!overlay || !content) return;
+
+    const status = data.status || 'pending';
+
+    const statusText =
+        status === 'approved' ? '✅ Approved' :
+        status === 'rejected' ? '❌ Rejected' :
+        '⏳ Pending';
+
+    content.innerHTML = `
+        <div class="receipt-brand">
+            <div class="receipt-icon">🧾</div>
+            <div class="receipt-title">Cash Tube</div>
+            <div style="font-size:12px;opacity:.65;">Withdrawal Receipt</div>
+            <div class="receipt-number">
+                ${receiptEscape(data.receiptNo || '-')}
+            </div>
+        </div>
+
+        <div style="padding-top:5px;">
+            <div class="receipt-line">
+                <span>User</span>
+                <strong>${receiptEscape(data.username || 'User')}</strong>
+            </div>
+
+            <div class="receipt-line">
+                <span>Amount</span>
+                <strong>${Number(data.amount || 0).toLocaleString()} MMK</strong>
+            </div>
+
+            <div class="receipt-line">
+                <span>Payment</span>
+                <strong>${receiptEscape(data.method || '-')}</strong>
+            </div>
+
+            <div class="receipt-line">
+                <span>Account</span>
+                <strong>${receiptEscape(data.accountName || '-')}</strong>
+            </div>
+
+            <div class="receipt-line">
+                <span>Phone</span>
+                <strong>${receiptEscape(data.phone || '-')}</strong>
+            </div>
+
+            <div class="receipt-line">
+                <span>Date</span>
+                <strong>${receiptDate(data.requestedAt)}</strong>
+            </div>
+
+            <div class="receipt-line">
+                <span>Status</span>
+                <strong class="receipt-status">${statusText}</strong>
+            </div>
+        </div>
+
+        <button class="receipt-close-btn"
+                onclick="closeWithdrawalReceipt()">
+            ပိတ်မည်
+        </button>
+    `;
+
+    overlay.classList.add('show');
+}
+
+function closeWithdrawalReceipt(){
+    const overlay = document.getElementById('withdrawalReceiptOverlay');
+    if(overlay) overlay.classList.remove('show');
+}
+
+async function openLatestWithdrawalReceipt(){
+    if(!currentUser){
+        showToast('❌ Please login','error');
+        return;
+    }
+
+    try{
+        const snap = await db.collection('withdrawals')
+            .where('userId','==',currentUser.uid)
+            .limit(30)
+            .get();
+
+        if(snap.empty){
+            showToast('🧾 Withdrawal Receipt မရှိသေးပါ','error');
+            return;
+        }
+
+        const docs = snap.docs.slice().sort(function(a,b){
+            const av = a.data().requestedAt;
+            const bv = b.data().requestedAt;
+
+            const at = av && typeof av.toMillis === 'function'
+                ? av.toMillis()
+                : (av && av.seconds ? av.seconds * 1000 : 0);
+
+            const bt = bv && typeof bv.toMillis === 'function'
+                ? bv.toMillis()
+                : (bv && bv.seconds ? bv.seconds * 1000 : 0);
+
+            return bt - at;
+        });
+
+        const doc = docs[0];
+        const d = doc.data() || {};
+
+        showWithdrawalReceipt({
+            receiptNo:d.receiptNo || ('CT-' + doc.id.slice(-8).toUpperCase()),
+            username:d.username || 'User',
+            amount:d.amount || 0,
+            method:d.method || '-',
+            accountName:d.accountName || '-',
+            phone:d.phone || '-',
+            status:d.status || 'pending',
+            requestedAt:d.requestedAt
+        });
+
+    }catch(e){
+        console.error('Withdrawal receipt error:',e);
+        showToast('❌ Receipt ဖတ်မရပါ','error');
+    }
+}
+
+</script>
+
+<div id="withdrawalReceiptOverlay"
+     class="withdrawal-receipt-overlay"
+     onclick="if(event.target===this) closeWithdrawalReceipt()">
+    <div class="withdrawal-receipt">
+        <div id="withdrawalReceiptContent"></div>
+    </div>
+</div>
+
 </body>
 </html>
