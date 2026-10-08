@@ -7134,11 +7134,11 @@ const ACHIEVEMENTS = [
     { id: 'ad_10', icon: '📺', title: 'Ad Fan', desc: '10 ads ကြည့်', target: 10, type: 'ads', reward: 250 },
     { id: 'ad_50', icon: '🎯', title: 'Ad Hunter', desc: '50 ads ကြည့်', target: 50, type: 'ads', reward: 500 },
     { id: 'ad_100', icon: '🏅', title: 'Ad Master', desc: '100 ads ကြည့်', target: 100, type: 'ads', reward: 1000 },
-    { id: 'ad_500', icon: '👑', title: 'Ad King', desc: '500 ads ကြည့်', target: 500, type: 'ads', reward: 5000 },
+    { id: 'ad_500', icon: '👑', title: 'Ad King', desc: '500 ads ကြည့်', target: 500, type: 'ads', reward: 1000 },
     { id: 'coin_1000', icon: '💰', title: 'Rich', desc: '1,000 coins', target: 1000, type: 'coins', reward: 200 },
-    { id: 'coin_10000', icon: '💎', title: 'Tycoon', desc: '10,000 coins', target: 10000, type: 'coins', reward: 2000 },
+    { id: 'coin_10000', icon: '💎', title: 'Tycoon', desc: '10,000 coins', target: 10000, type: 'coins', reward: 500 },
     { id: 'ref_1', icon: '👥', title: 'Inviter', desc: '1 ယောက် ဖိတ်', target: 1, type: 'refs', reward: 500 },
-    { id: 'ref_10', icon: '🌟', title: 'Super Inviter', desc: '10 ယောက် ဖိတ်', target: 10, type: 'refs', reward: 5000 }
+    { id: 'ref_10', icon: '🌟', title: 'Super Inviter', desc: '10 ယောက် ဖိတ်', target: 10, type: 'refs', reward: 1000 }
 ];
 
 const AD_CARDS = [
@@ -8874,7 +8874,7 @@ auth.onAuthStateChanged(async (user) => {
             const doc = await db.collection('users').doc(user.uid).get();
             if (doc.exists) {
                 const data = doc.data();
-                if (data.isBanned) { await auth.signOut(); showToast('⛔ Banned', 'error'); return; }
+                if (data.isBanned) { await auth.signOut(); showToast('သင့်အကောင့်ကို system မှ စစ်ဆေးနေဆဲ', 'error'); return; }
                 userData.coins = data.coins || 0;
                 userData.username = data.username || 'User';
                 userData.email = data.email || '';
