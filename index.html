@@ -8777,10 +8777,11 @@ async function requestWithdraw() {
     } catch (e) {
         console.error('requestWithdraw error:', e);
 
+        const withdrawError = String(e.code || e.message || 'UNKNOWN_ERROR');
         showToast(
             e.message === 'INSUFFICIENT_MMK'
                 ? '❌ MMK လက်ကျန်မလုံလောက်ပါ'
-                : '❌ Request မတင်နိုင်ပါ',
+                : '❌ Request မတင်နိုင်ပါ: ' + withdrawError.slice(0, 90),
             'error'
         );
     }
