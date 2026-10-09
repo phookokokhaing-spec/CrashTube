@@ -8777,7 +8777,17 @@ async function requestWithdraw() {
     } catch (e) {
         console.error('requestWithdraw error:', e);
 
-        const withdrawError = String(e.code || e.message || 'UNKNOWN_ERROR');
+        console.error('WITHDRAW ERROR DETAILS:', e);
+        let withdrawError = 'UNKNOWN_ERROR';
+        try {
+            withdrawError = [
+                e && e.code,
+                e && e.message,
+                typeof e === 'string' ? e : JSON.stringify(e)
+            ].filter(Boolean).join(' | ') || String(e);
+        } catch (_) {
+            withdrawError = String(e);
+        }
         showToast(
             e.message === 'INSUFFICIENT_MMK'
                 ? '❌ MMK လက်ကျန်မလုံလောက်ပါ'
