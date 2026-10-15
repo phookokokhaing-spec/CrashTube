@@ -9691,7 +9691,15 @@ async function verifyAdmin() {
 
         // Admin status must come from the Firestore admins collection.
         const adminRef = db.collection('admins').doc(user.uid);
+        console.log('[ADMIN DEBUG] Firebase UID:', user.uid);
+
         const adminSnap = await adminRef.get();
+
+        console.log('[ADMIN DEBUG] Document exists:', adminSnap.exists);
+        console.log('[ADMIN DEBUG] Active value:',
+            adminSnap.exists ? adminSnap.data().active : '(document missing)');
+        console.log('[ADMIN DEBUG] Active type:',
+            adminSnap.exists ? typeof adminSnap.data().active : '(document missing)');
 
         if (!adminSnap.exists || adminSnap.data().active !== true) {
             isAdmin = false;
