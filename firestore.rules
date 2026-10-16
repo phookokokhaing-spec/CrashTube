@@ -67,6 +67,33 @@ service cloud.firestore {
       allow update, delete: if isAdmin();
     }
 
+    // Public leaderboard: signed-in users may view rankings.
+    // Each user may only create/update their own daily entry.
+    match /publicLeaderboard/{id} {
+      allow read: if signedIn();
+
+      allow create: if signedIn()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.date is string
+        && id == request.auth.uid + '_' + request.resource.data.date
+        && request.resource.data.keys().hasOnly([
+          'userId', 'username', 'date', 'count',
+          'totalCoins', 'updatedAt'
+        ]);
+
+      allow update: if signedIn()
+        && resource.data.userId == request.auth.uid
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.date == resource.data.date
+        && id == request.auth.uid + '_' + request.resource.data.date
+        && request.resource.data.keys().hasOnly([
+          'userId', 'username', 'date', 'count',
+          'totalCoins', 'updatedAt'
+        ]);
+
+      allow delete: if isAdmin();
+    }
+
     match /settings/{docId} {
       allow read: if signedIn();
       allow write: if isAdmin();

@@ -7103,23 +7103,31 @@ function setPendingAdRewards(p) {
 }
 async function flushPendingAdRewards(force = false) {
     if (!currentUser || _adRewardFlushPromise) return false;
+
     const pending = getPendingAdRewards();
     if (!pending.count || (!force && pending.count < AD_SYNC_BATCH)) return false;
 
     _adRewardFlushPromise = (async () => {
         try {
-            const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Yangon' }).format(new Date());
-            const adRef = db.collection('adWatches').doc(currentUser.uid + '_' + today);
-            const txRef = db.collection('transactions').doc();
-            const batch = db.batch();
+            const uid = currentUser.uid;
+            const today = new Intl.DateTimeFormat('en-CA', {
+                timeZone: 'Asia/Yangon'
+            }).format(new Date());
 
-            batch.update(db.collection('users').doc(currentUser.uid), {
+            const batch = db.batch();
+            const userRef = db.collection('users').doc(uid);
+            const adRef = db.collection('adWatches').doc(uid + '_' + today);
+            const publicRef = db.collection('publicLeaderboard').doc(uid + '_' + today);
+            const txRef = db.collection('transactions').doc();
+
+            batch.update(userRef, {
                 coins: firebase.firestore.FieldValue.increment(pending.coins),
                 totalAds: firebase.firestore.FieldValue.increment(pending.count)
             });
+
             batch.set(adRef, {
-                userId: currentUser.uid,
-                authUid: currentUser.uid,
+                userId: uid,
+                authUid: uid,
                 username: userData.username || 'User',
                 email: userData.email || '',
                 date: today,
@@ -7127,96 +7135,43 @@ async function flushPendingAdRewards(force = false) {
                 totalCoins: firebase.firestore.FieldValue.increment(pending.coins),
                 lastWatch: firebase.firestore.FieldValue.serverTimestamp()
             }, { merge: true });
+
+            batch.set(publicRef, {
+                userId: uid,
+                username: userData.username || 'User',
+                date: today,
+                count: firebase.firestore.FieldValue.increment(pending.count),
+                totalCoins: firebase.firestore.FieldValue.increment(pending.coins),
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
+
             batch.set(txRef, {
-                userId: currentUser.uid,
+                userId: uid,
                 type: 'ad_watch_batch',
                 amount: pending.coins,
                 description: `${pending.count} ads - ${pending.lastTitle || 'Ad Watch'}`,
                 timestamp: firebase.firestore.FieldValue.serverTimestamp()
             });
-            console.log('🔥 AD SYNC STEP 1: batch prepared');
-            console.log('🔥 AD SYNC USER:', currentUser.uid);
-            console.log('🔥 AD SYNC PENDING:', pending);
 
-            try {
-                await db.collection('users').doc(currentUser.uid).update({
-                    coins: firebase.firestore.FieldValue.increment(pending.coins),
-                    totalAds: firebase.firestore.FieldValue.increment(pending.count)
-                });
-                console.log('✅ AD SYNC STEP 2: users update OK');
-            } catch (e) {
-                console.error('❌ AD SYNC USERS FAILED:', e);
-                throw e;
-            }
-
-            try {
-                await db.collection('adWatches').doc(currentUser.uid + '_' + today).set({
-                    userId: currentUser.uid,
-                    authUid: currentUser.uid,
-                    username: userData.username || 'User',
-                    email: userData.email || '',
-                    date: today,
-                    count: firebase.firestore.FieldValue.increment(pending.count),
-                    totalCoins: firebase.firestore.FieldValue.increment(pending.coins),
-                    lastWatch: firebase.firestore.FieldValue.serverTimestamp()
-                }, { merge: true });
-                console.log('✅ AD SYNC STEP 3: adWatches write OK');
-            } catch (e) {
-                console.error('❌ AD SYNC ADWATCHES FAILED:', e);
-                throw e;
-            }
-
-            try {
-                await db.collection('transactions').doc().set({
-                    userId: currentUser.uid,
-                    type: 'ad_watch_batch',
-                    amount: pending.coins,
-                    description: `${pending.count} ads - ${pending.lastTitle || 'Ad Watch'}`,
-                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
-                });
-                console.log('✅ AD SYNC STEP 4: transactions write OK');
-            } catch (e) {
-                console.error('❌ AD SYNC TRANSACTIONS FAILED:', e);
-                throw e;
-            }
+            await batch.commit();
 
             setPendingAdRewards({ count: 0, coins: 0, lastTitle: '' });
+            console.log('✅ AD REWARD BATCH SYNC OK:', pending.count, pending.coins);
+
             return true;
         } catch (e) {
-            console.error('🔥 AD FIRESTORE SYNC ERROR:', e);
-            console.error('🔥 AD FIRESTORE ERROR CODE:', e && e.code);
-            console.error('🔥 AD FIRESTORE ERROR MESSAGE:', e && e.message);
-            console.error('🔥 AD FIRESTORE PENDING:', pending);
-            console.error('🔥 AD FIRESTORE USER:', currentUser && currentUser.uid);
-
-            const code = e && e.code ? e.code : 'unknown';
-            const message = e && e.message ? e.message : 'Unknown Firestore error';
-
+            console.error('AD REWARD SYNC FAILED:', e.code, e.message);
             try {
-                showToast(
-                    '⚠️ Ad Sync Failed: ' + code,
-                    'error'
-                );
+                showToast('⚠️ Ad Sync Failed: ' + (e.code || 'unknown'), 'error');
             } catch (_) {}
-
-            try {
-                alert(
-                    '🔥 REALCASH AD SYNC ERROR\\n\\n' +
-                    'Code: ' + code + '\\n\\n' +
-                    'Message: ' + message + '\\n\\n' +
-                    'Pending Ads: ' + Number(pending.count || 0) + '\\n' +
-                    'Pending Coins: ' + Number(pending.coins || 0)
-                );
-            } catch (_) {}
-
             return false;
         } finally {
             _adRewardFlushPromise = null;
         }
     })();
+
     return await _adRewardFlushPromise;
 }
-
 
 const LEVELS = [
     { level: 1, ads: 0, bonus: 0, title: 'Novice', vip: 'Bronze', color: '#cd7f32' },
@@ -7833,7 +7788,7 @@ async function loadLeaderboard(type = 'today') {
         let users = [];
         if (type === 'today') {
             const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Yangon' }).format(new Date());
-            const snap = await db.collection('adWatches').where('date', '==', today).get();
+            const snap = await db.collection('publicLeaderboard').where('date', '==', today).get();
             const records = [];
             snap.forEach(doc => records.push({ userId: doc.data().userId, ...doc.data() }));
             records.sort((a, b) => (b.totalCoins || 0) - (a.totalCoins || 0));
@@ -8144,7 +8099,7 @@ async function loadDashboard() {
     historyList.innerHTML = '<div class="dlt-loading">Loading...</div>';
     try {
         const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Yangon' }).format(new Date());
-        const snapshot = await db.collection('adWatches').where('date', '==', today).get();
+        const snapshot = await db.collection('publicLeaderboard').where('date', '==', today).get();
         const records = [];
         snapshot.forEach(doc => records.push({ id: doc.id, ...doc.data() }));
 
@@ -8239,7 +8194,6 @@ async function loadDashboard() {
                         <div style="font-weight:700;color:var(--text-1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
                             ${r.username || 'User'}${isMe ? ' (You)' : ''}
                         </div>
-                        ${r.email ? `<div style="font-size:9px;color:var(--text-3);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${r.email}</div>` : ''}
                     </div>
                     <div style="background:var(--blue-500);color:#fff;padding:4px 10px;border-radius:999px;font-weight:800;font-size:10px;white-space:nowrap;">
                         ${r.count || 0} ads
