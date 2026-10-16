@@ -6946,6 +6946,10 @@ background: linear-gradient(
                         🥉 Top 3: 1,000 Coins<br>
                         Admin စစ်ဆေးပြီးမှ Coins ပေးပါမည်။
                     </div>
+                    <button class="btn-sm mint" onclick="auditDailyTop3Counts()"
+                            style="width:100%;margin-top:8px;">
+                        🔍 Ads Count တိုက်စစ်ရန်
+                    </button>
                     <button class="btn-sm mint" onclick="prepareDailyTop3Rewards()"
                             style="width:100%;margin-top:10px;">
                         🔄 ယနေ့ Top 3 စာရင်းပြင်ဆင်ရန်
@@ -7822,6 +7826,48 @@ function shareReferral() {
 // ============================================================
 //  LEADERBOARD
 // ============================================================
+
+// Repair only the signed-in user's daily leaderboard from their own adWatches record.
+async function repairMyDailyLeaderboardCount(today) {
+    if (!currentUser || !today) return false;
+
+    const uid = currentUser.uid;
+    const cacheKey = 'cashtube_lb_repaired_v1_' + uid + '_' + today;
+
+    if (localStorage.getItem(cacheKey) === 'true') return true;
+
+    try {
+        const adRef = db.collection('adWatches').doc(uid + '_' + today);
+        const adSnap = await adRef.get();
+
+        if (!adSnap.exists) return false;
+
+        const adData = adSnap.data() || {};
+        const count = Number(adData.count || 0);
+        const totalCoins = Number(adData.totalCoins || 0);
+
+        if (!Number.isFinite(count) || count < 0) return false;
+
+        const lbRef = db.collection('publicLeaderboard').doc(uid + '_' + today);
+
+        await lbRef.set({
+            userId: uid,
+            username: (userData && userData.username) || adData.username || 'User',
+            date: today,
+            count: count,
+            totalCoins: Number.isFinite(totalCoins) ? totalCoins : 0,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+
+        localStorage.setItem(cacheKey, 'true');
+        console.log('DAILY LEADERBOARD REPAIRED:', count);
+        return true;
+    } catch (e) {
+        console.warn('DAILY LEADERBOARD REPAIR SKIPPED:', e.code || e.message);
+        return false;
+    }
+}
+
 async function loadLeaderboard(type = 'today') {
     currentLeaderboardType = type;
     const listEl = document.getElementById('lbList');
@@ -7832,6 +7878,7 @@ async function loadLeaderboard(type = 'today') {
         let users = [];
         if (type === 'today') {
             const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Yangon' }).format(new Date());
+            await repairMyDailyLeaderboardCount(today);
             const snap = await db.collection('publicLeaderboard').where('date', '==', today).get();
             const records = [];
             snap.forEach(doc => records.push({ userId: doc.data().userId, ...doc.data() }));
@@ -7841,27 +7888,17 @@ async function loadLeaderboard(type = 'today') {
                 return Number(b.totalCoins || 0) - Number(a.totalCoins || 0);
             });
             const top = records.slice(0, 30);
-            // Avoid 30 individual user reads. Firestore 'in' queries allow
-            // up to 10 IDs, so fetch the user data in small groups.
-            for (let i = 0; i < top.length; i += 10) {
-                const group = top.slice(i, i + 10);
-                const ids = group.map(r => r.userId).filter(Boolean);
-                if (!ids.length) continue;
-                try {
-                    const uSnap = await db.collection('users')
-                        .where(firebase.firestore.FieldPath.documentId(), 'in', ids).get();
-                    const userMap = {};
-                    uSnap.forEach(d => userMap[d.id] = d.data());
-                    group.forEach(r => {
-                        const d = userMap[r.userId];
-                        if (d) users.push({
-                            uid: r.userId, name: d.username || 'User',
-                            coins: r.totalCoins || 0, ads: r.count || 0,
-                            level: getLevelFromAds(d.totalAds || 0)
-                        });
-                    });
-                } catch (e) {}
-            }
+            // Use public leaderboard data directly.
+            // Avoid unauthorized reads from the private users collection.
+            users = top
+                .filter(r => r.userId)
+                .map(r => ({
+                    uid: r.userId,
+                    name: r.username || 'User',
+                    coins: Number(r.totalCoins || 0),
+                    ads: Number(r.count || 0),
+                    level: getLevelFromAds(Number(r.count || 0))
+                }));
         } else {
             const snap = await db.collection('users').orderBy('coins', 'desc').limit(30).get();
             snap.forEach(doc => {
@@ -8147,6 +8184,7 @@ async function loadDashboard() {
     historyList.innerHTML = '<div class="dlt-loading">Loading...</div>';
     try {
         const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Yangon' }).format(new Date());
+        await repairMyDailyLeaderboardCount(today);
         const snapshot = await db.collection('publicLeaderboard').where('date', '==', today).get();
         const records = [];
         snapshot.forEach(doc => records.push({ id: doc.id, ...doc.data() }));
@@ -9590,6 +9628,94 @@ function dailyTop3StatusText(status) {
     if (status === 'rejected') return '❌ Rejected';
     if (status === 'superseded') return '↪️ Updated ranking';
     return '⏳ Pending approval';
+}
+
+
+async function auditDailyTop3Counts() {
+    if (!isAdmin) {
+        showToast('❌ Admin login လုပ်ပါ', 'error');
+        return;
+    }
+
+    const statusEl = document.getElementById('dailyTop3RewardStatus');
+    if (statusEl) statusEl.textContent = 'နေ့စဉ် Ads Count များကို တိုက်စစ်နေပါသည်...';
+
+    try {
+        const today = dailyTop3Today();
+
+        const [adsSnap, publicSnap] = await Promise.all([
+            db.collection('adWatches').where('date', '==', today).get(),
+            db.collection('publicLeaderboard').where('date', '==', today).get()
+        ]);
+
+        const adsMap = new Map();
+        adsSnap.forEach(doc => {
+            const d = doc.data() || {};
+            const uid = d.userId || d.authUid;
+            if (!uid) return;
+
+            const count = Number(d.count || 0);
+            const coins = Number(d.totalCoins || 0);
+            if (!Number.isFinite(count) || count < 0) return;
+
+            const old = adsMap.get(uid) || { count: 0, coins: 0 };
+            old.count += count;
+            old.coins += Number.isFinite(coins) ? coins : 0;
+            adsMap.set(uid, old);
+        });
+
+        const publicMap = new Map();
+        publicSnap.forEach(doc => {
+            const d = doc.data() || {};
+            const uid = d.userId;
+            if (!uid) return;
+
+            publicMap.set(uid, {
+                count: Number(d.count || 0),
+                coins: Number(d.totalCoins || 0)
+            });
+        });
+
+        const uids = new Set([...adsMap.keys(), ...publicMap.keys()]);
+        const mismatches = [];
+
+        for (const uid of uids) {
+            const a = adsMap.get(uid) || { count: 0, coins: 0 };
+            const b = publicMap.get(uid) || { count: 0, coins: 0 };
+
+            if (a.count !== b.count || a.coins !== b.coins) {
+                mismatches.push({
+                    uid,
+                    adWatchesCount: a.count,
+                    publicCount: b.count,
+                    adWatchesCoins: a.coins,
+                    publicCoins: b.coins
+                });
+            }
+        }
+
+        console.table(mismatches);
+
+        const message = mismatches.length
+            ? `⚠️ ${today}: Count မတူသော User ${mismatches.length} ယောက်ရှိသည်။ Console ထဲတွင် အသေးစိတ်ကြည့်ပါ။`
+            : `✅ ${today}: adWatches ${adsMap.size} ယောက်၊ publicLeaderboard ${publicMap.size} ယောက်။ Count/Coins ကွာခြားမှု မတွေ့ပါ။`;
+
+        if (statusEl) statusEl.textContent = message;
+        console.log('Daily Top 3 audit:', {
+            date: today,
+            adWatchesUsers: adsMap.size,
+            publicLeaderboardUsers: publicMap.size,
+            mismatchCount: mismatches.length,
+            mismatches
+        });
+
+        showToast(message, mismatches.length ? 'error' : 'success');
+    } catch (e) {
+        console.error('DAILY TOP3 AUDIT ERROR:', e);
+        if (statusEl) {
+            statusEl.textContent = '❌ စစ်ဆေးမှု မအောင်မြင်ပါ: ' + (e.code || e.message);
+        }
+    }
 }
 
 async function prepareDailyTop3Rewards() {

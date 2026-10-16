@@ -58,10 +58,9 @@ service cloud.firestore {
     match /withdrawRequests/{id} {
       allow read, write: if isAdmin();
     }
-
     match /dailyTop3Rewards/{id} {
-      allow create: if signedIn()
-        && request.resource.data.userId == request.auth.uid;
+      // Only Admin can create reward nominations for users.
+      allow create: if isAdmin();
       allow read: if isAdmin()
         || (signedIn() && resource.data.userId == request.auth.uid);
       allow update, delete: if isAdmin();
