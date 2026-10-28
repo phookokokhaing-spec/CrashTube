@@ -84,192 +84,116 @@ function getPendingAdRewards() {
 }
 function setPendingAdRewards(p) {
     if (!currentUser) return;
-    localStorage.setItem('pendingAdRewards_' + currentUser.uid, JSON.stringify(p));
-}
-async function flushPendingAdRewards(force = false) {
-    if (!currentUser || _adRewardFlushPromise) return false;
 
-    const uid = currentUser.uid;
-    const pending = getPendingAdRewards();
+    const previous = getPendingAdRewards();
 
-    pending.count = Number(pending.count || 0);
-    pending.coins = Number(pending.coins || 0);
-
-    if (
-        !Number.isFinite(pending.count) ||
-        !Number.isFinite(pending.coins) ||
-        pending.count <= 0 ||
-        pending.coins < 0
-    ) {
-        console.error('Invalid pending ad rewards:', pending);
-        return false;
-    }
-
-    if (!force && pending.count < AD_SYNC_BATCH) return false;
-
-    if (!pending.batchId) {
-        pending.batchId =
-            Date.now().toString(36) + '_' +
-            Math.random().toString(36).slice(2, 12);
-
-        try {
-            localStorage.setItem(
-                'pendingAdRewards_' + uid,
-                JSON.stringify(pending)
+    // Existing pending ads may already be counted on the old leaderboard.
+    // Remember the old values to prevent counting them twice.
+    if (Number(p.count || 0) <= 0) {
+        p.leaderboardSyncedCount = 0;
+        p.leaderboardSyncedCoins = 0;
+    } else {
+        if (p.leaderboardSyncedCount == null) {
+            p.leaderboardSyncedCount = Number(
+                previous.leaderboardSyncedCount ?? previous.count ?? 0
             );
-        } catch (e) {
-            console.error('Could not persist ad batch ID:', e);
-            return false;
+        }
+        if (p.leaderboardSyncedCoins == null) {
+            p.leaderboardSyncedCoins = Number(
+                previous.leaderboardSyncedCoins ?? previous.coins ?? 0
+            );
         }
     }
 
-    const batch = {
-        uid: uid,
-        batchId: pending.batchId,
-        count: pending.count,
-        coins: pending.coins,
-        lastTitle: pending.lastTitle || 'Ad Watch'
-    };
+    // Local queue only. Firestore writes happen in the batch sync.
+    localStorage.setItem(
+        'pendingAdRewards_' + currentUser.uid,
+        JSON.stringify(p)
+    );
+}
+
+async function flushPendingAdRewards(force = false) {
+    if (!currentUser || _adRewardFlushPromise) return false;
+
+    const pending = getPendingAdRewards();
+    if (!pending.count || (!force && pending.count < AD_SYNC_BATCH)) return false;
 
     _adRewardFlushPromise = (async () => {
         try {
+            const uid = currentUser.uid;
             const today = new Intl.DateTimeFormat('en-CA', {
                 timeZone: 'Asia/Yangon'
             }).format(new Date());
 
+            const batch = db.batch();
             const userRef = db.collection('users').doc(uid);
             const adRef = db.collection('adWatches').doc(uid + '_' + today);
+            const txRef = db.collection('transactions').doc();
 
-            // Stable document ID makes retries identifiable.
-            const txRef = db.collection('transactions').doc(
-                'ad_batch_' + uid + '_' + batch.batchId
-            );
-
-            const result = await db.runTransaction(async transaction => {
-                // Read first: if this batch was already committed,
-                // do not increment the user's coins again.
-                const existing = await transaction.get(txRef);
-
-                if (existing.exists) {
-                    const data = existing.data() || {};
-                    return {
-                        alreadyCommitted: true,
-                        count: Number(data.adCount || batch.count),
-                        coins: Number(data.amount || batch.coins)
-                    };
-                }
-
-                transaction.update(userRef, {
-                    coins: firebase.firestore.FieldValue.increment(batch.coins),
-                    totalAds: firebase.firestore.FieldValue.increment(batch.count)
-                });
-
-                transaction.set(adRef, {
-                    userId: uid,
-                    authUid: uid,
-                    username: userData.username || 'User',
-                    email: userData.email || '',
-                    date: today,
-                    count: firebase.firestore.FieldValue.increment(batch.count),
-                    totalCoins: firebase.firestore.FieldValue.increment(batch.coins),
-                    lastWatch: firebase.firestore.FieldValue.serverTimestamp()
-                }, { merge: true });
-
-                transaction.set(txRef, {
-                    userId: uid,
-                    type: 'ad_watch_batch',
-                    amount: batch.coins,
-                    adCount: batch.count,
-                    batchId: batch.batchId,
-                    description: `${batch.count} ads - ${batch.lastTitle}`,
-                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
-                });
-
-                return {
-                    alreadyCommitted: false,
-                    count: batch.count,
-                    coins: batch.coins
-                };
+            batch.update(userRef, {
+                coins: firebase.firestore.FieldValue.increment(pending.coins),
+                totalAds: firebase.firestore.FieldValue.increment(pending.count)
             });
 
-            // Remove only the rewards confirmed as committed.
-            // Preserve any rewards that may have been queued meanwhile.
-            const storageKey = 'pendingAdRewards_' + uid;
-            let currentPending;
+            batch.set(adRef, {
+                userId: uid,
+                authUid: uid,
+                username: userData.username || 'User',
+                email: userData.email || '',
+                date: today,
+                count: firebase.firestore.FieldValue.increment(pending.count),
+                totalCoins: firebase.firestore.FieldValue.increment(pending.coins),
+                lastWatch: firebase.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
 
-            try {
-                currentPending = JSON.parse(
-                    localStorage.getItem(storageKey) ||
-                    '{"count":0,"coins":0,"lastTitle":""}'
-                );
-            } catch (_) {
-                currentPending = null;
-            }
-
-            if (currentPending &&
-                currentPending.batchId === batch.batchId) {
-
-                const remainingCount = Math.max(
-                    0,
-                    Number(currentPending.count || 0) - result.count
-                );
-
-                const remainingCoins = Math.max(
-                    0,
-                    Number(currentPending.coins || 0) - result.coins
-                );
-
-                if (remainingCount > 0 || remainingCoins > 0) {
-                    currentPending.count = remainingCount;
-                    currentPending.coins = remainingCoins;
-                    currentPending.batchId =
-                        Date.now().toString(36) + '_' +
-                        Math.random().toString(36).slice(2, 12);
-
-                    localStorage.setItem(
-                        storageKey,
-                        JSON.stringify(currentPending)
-                    );
-                } else {
-                    localStorage.setItem(storageKey, JSON.stringify({
-                        count: 0,
-                        coins: 0,
-                        lastTitle: ''
-                    }));
-                }
-            }
-
-            console.log(
-                result.alreadyCommitted
-                    ? '✅ AD SYNC: Batch was already committed; no duplicate reward.'
-                    : '✅ AD SYNC: Atomic transaction committed.',
-                {
-                    uid: uid,
-                    count: result.count,
-                    coins: result.coins,
-                    batchId: batch.batchId
-                }
+            // Update the public leaderboard only for newly queued ads.
+            // Legacy pending ads are excluded because they may already
+            // have been counted by the previous per-ad update logic.
+            const leaderboardDelta = Math.max(
+                0,
+                Number(pending.count || 0) -
+                Number(pending.leaderboardSyncedCount ?? pending.count ?? 0)
+            );
+            const leaderboardCoinsDelta = Math.max(
+                0,
+                Number(pending.coins || 0) -
+                Number(pending.leaderboardSyncedCoins ?? pending.coins ?? 0)
             );
 
+            if (leaderboardDelta > 0) {
+                const leaderboardRef = db.collection('publicLeaderboard')
+                    .doc(uid + '_' + today);
+
+                batch.set(leaderboardRef, {
+                    userId: uid,
+                    username: (userData && userData.username) || 'User',
+                    date: today,
+                    count: firebase.firestore.FieldValue.increment(leaderboardDelta),
+                    totalCoins: firebase.firestore.FieldValue.increment(leaderboardCoinsDelta),
+                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                }, { merge: true });
+            }
+
+            batch.set(txRef, {
+                userId: uid,
+                type: 'ad_watch_batch',
+                amount: pending.coins,
+                description: `${pending.count} ads - ${pending.lastTitle || 'Ad Watch'}`,
+                timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            });
+
+            await batch.commit();
+
+            setPendingAdRewards({ count: 0, coins: 0, lastTitle: '' });
+            console.log('✅ AD REWARD BATCH SYNC OK:', pending.count, pending.coins);
+
             return true;
-
         } catch (e) {
-            console.error('❌ AD FIRESTORE SYNC FAILED:', e);
-            console.error('Error code:', e && e.code);
-            console.error('Error message:', e && e.message);
-            console.error('Pending batch:', batch);
-
+            console.error('AD REWARD SYNC FAILED:', e.code, e.message);
             try {
-                showToast(
-                    '⚠️ Ad Sync Failed: ' +
-                    (e && e.code ? e.code : 'unknown'),
-                    'error'
-                );
+                showToast('⚠️ Ad Sync Failed: ' + (e.code || 'unknown'), 'error');
             } catch (_) {}
-
-            // Keep pending rewards for retry.
             return false;
-
         } finally {
             _adRewardFlushPromise = null;
         }
@@ -539,12 +463,6 @@ let isUpdatingCoins = false;
 let isAdPlaying = false;
 let adCardTimers = {};
 let adPageInterval = null;
-// CASHTUBE_LISTENER_TIMER_FIX_V1
-let cashTubeUserSnapshotUnsubscribe = null;
-let cashTubeDailyBonusInterval = null;
-let cashTubeSaveCoinsInterval = null;
-let cashTubeAuthGeneration = 0;
-
 let currentAdCard = null;
 let isWithdrawOpen = localStorage.getItem('isWithdrawOpen') === 'true';
 let currentLeaderboardType = 'today';
@@ -889,6 +807,48 @@ function shareReferral() {
 // ============================================================
 //  LEADERBOARD
 // ============================================================
+
+// Repair only the signed-in user's daily leaderboard from their own adWatches record.
+async function repairMyDailyLeaderboardCount(today) {
+    if (!currentUser || !today) return false;
+
+    const uid = currentUser.uid;
+    const cacheKey = 'cashtube_lb_repaired_v1_' + uid + '_' + today;
+
+    if (localStorage.getItem(cacheKey) === 'true') return true;
+
+    try {
+        const adRef = db.collection('adWatches').doc(uid + '_' + today);
+        const adSnap = await adRef.get();
+
+        if (!adSnap.exists) return false;
+
+        const adData = adSnap.data() || {};
+        const count = Number(adData.count || 0);
+        const totalCoins = Number(adData.totalCoins || 0);
+
+        if (!Number.isFinite(count) || count < 0) return false;
+
+        const lbRef = db.collection('publicLeaderboard').doc(uid + '_' + today);
+
+        await lbRef.set({
+            userId: uid,
+            username: (userData && userData.username) || adData.username || 'User',
+            date: today,
+            count: count,
+            totalCoins: Number.isFinite(totalCoins) ? totalCoins : 0,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+
+        localStorage.setItem(cacheKey, 'true');
+        console.log('DAILY LEADERBOARD REPAIRED:', count);
+        return true;
+    } catch (e) {
+        console.warn('DAILY LEADERBOARD REPAIR SKIPPED:', e.code || e.message);
+        return false;
+    }
+}
+
 async function loadLeaderboard(type = 'today') {
     currentLeaderboardType = type;
     const listEl = document.getElementById('lbList');
@@ -899,32 +859,27 @@ async function loadLeaderboard(type = 'today') {
         let users = [];
         if (type === 'today') {
             const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Yangon' }).format(new Date());
-            const snap = await db.collection('adWatches').where('date', '==', today).get();
+            await repairMyDailyLeaderboardCount(today);
+            const snap = await db.collection('publicLeaderboard').where('date', '==', today).get();
             const records = [];
             snap.forEach(doc => records.push({ userId: doc.data().userId, ...doc.data() }));
-            records.sort((a, b) => (b.totalCoins || 0) - (a.totalCoins || 0));
+            records.sort((a, b) => {
+                const countDiff = Number(b.count || 0) - Number(a.count || 0);
+                if (countDiff !== 0) return countDiff;
+                return Number(b.totalCoins || 0) - Number(a.totalCoins || 0);
+            });
             const top = records.slice(0, 30);
-            // Avoid 30 individual user reads. Firestore 'in' queries allow
-            // up to 10 IDs, so fetch the user data in small groups.
-            for (let i = 0; i < top.length; i += 10) {
-                const group = top.slice(i, i + 10);
-                const ids = group.map(r => r.userId).filter(Boolean);
-                if (!ids.length) continue;
-                try {
-                    const uSnap = await db.collection('users')
-                        .where(firebase.firestore.FieldPath.documentId(), 'in', ids).get();
-                    const userMap = {};
-                    uSnap.forEach(d => userMap[d.id] = d.data());
-                    group.forEach(r => {
-                        const d = userMap[r.userId];
-                        if (d) users.push({
-                            uid: r.userId, name: d.username || 'User',
-                            coins: r.totalCoins || 0, ads: r.count || 0,
-                            level: getLevelFromAds(d.totalAds || 0)
-                        });
-                    });
-                } catch (e) {}
-            }
+            // Use public leaderboard data directly.
+            // Avoid unauthorized reads from the private users collection.
+            users = top
+                .filter(r => r.userId)
+                .map(r => ({
+                    uid: r.userId,
+                    name: r.username || 'User',
+                    coins: Number(r.totalCoins || 0),
+                    ads: Number(r.count || 0),
+                    level: getLevelFromAds(Number(r.count || 0))
+                }));
         } else {
             const snap = await db.collection('users').orderBy('coins', 'desc').limit(30).get();
             snap.forEach(doc => {
@@ -949,20 +904,20 @@ async function loadLeaderboard(type = 'today') {
             <div style="display:flex;flex-direction:column;align-items:center;gap:6px;flex:1;max-width:90px;">
                 <div style="width:50px;height:50px;border-radius:50%;background:linear-gradient(135deg,var(--blue-400),var(--blue-600));display:flex;align-items:center;justify-content:center;font-size:22px;border:3px solid var(--blue-300);">🥈</div>
                 <div style="font-size:10px;font-weight:700;text-align:center;color:var(--text-1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;">${top3[1].name}</div>
-                <div style="font-size:12px;font-weight:700;color:var(--blue-600);">${top3[1].coins.toLocaleString()}</div>
+                <div style="font-size:12px;font-weight:700;color:var(--blue-600);">${top3[1].ads.toLocaleString()} ads</div>
             </div>` : '';
         podiumHtml += top3[0] ? `
             <div style="display:flex;flex-direction:column;align-items:center;gap:6px;flex:1;max-width:90px;">
                 <div style="font-size:24px;">👑</div>
                 <div style="width:62px;height:62px;border-radius:50%;background:linear-gradient(135deg,var(--mint-400),var(--mint-600));display:flex;align-items:center;justify-content:center;font-size:26px;border:3px solid var(--mint-300);box-shadow:0 8px 20px rgba(16,185,129,0.4);">🥇</div>
                 <div style="font-size:11px;font-weight:700;text-align:center;color:var(--text-1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;">${top3[0].name}</div>
-                <div style="font-size:13px;font-weight:700;color:var(--mint-600);">${top3[0].coins.toLocaleString()}</div>
+                <div style="font-size:13px;font-weight:700;color:var(--mint-600);">${top3[0].ads.toLocaleString()} ads</div>
             </div>` : '';
         podiumHtml += top3[2] ? `
             <div style="display:flex;flex-direction:column;align-items:center;gap:6px;flex:1;max-width:90px;">
                 <div style="width:50px;height:50px;border-radius:50%;background:linear-gradient(135deg,var(--slate-400),var(--slate-600));display:flex;align-items:center;justify-content:center;font-size:22px;border:3px solid var(--slate-300);">🥉</div>
                 <div style="font-size:10px;font-weight:700;text-align:center;color:var(--text-1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;">${top3[2].name}</div>
-                <div style="font-size:12px;font-weight:700;color:var(--slate-600);">${top3[2].coins.toLocaleString()}</div>
+                <div style="font-size:12px;font-weight:700;color:var(--slate-600);">${top3[2].ads.toLocaleString()} ads</div>
             </div>` : '';
         podiumEl.innerHTML = podiumHtml;
 
@@ -1210,32 +1165,10 @@ async function loadDashboard() {
     historyList.innerHTML = '<div class="dlt-loading">Loading...</div>';
     try {
         const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Yangon' }).format(new Date());
-        const snapshot = await db.collection('adWatches').where('date', '==', today).get();
+        await repairMyDailyLeaderboardCount(today);
+        const snapshot = await db.collection('publicLeaderboard').where('date', '==', today).get();
         const records = [];
         snapshot.forEach(doc => records.push({ id: doc.id, ...doc.data() }));
-
-        // Include locally queued ads so Dashboard shows today's activity
-        // even before the 5-ad Firestore sync batch is reached.
-        const pending = getPendingAdRewards();
-        if (pending.count > 0) {
-            const myRecord = records.find(r => r.userId === currentUser.uid);
-            if (myRecord) {
-                myRecord.count = Number(myRecord.count || 0) + Number(pending.count || 0);
-                myRecord.totalCoins = Number(myRecord.totalCoins || 0) + Number(pending.coins || 0);
-            } else {
-                records.push({
-                    id: 'local_pending_' + currentUser.uid,
-                    userId: currentUser.uid,
-                    authUid: currentUser.uid,
-                    username: userData.username || 'User',
-                    email: userData.email || '',
-                    date: today,
-                    count: Number(pending.count || 0),
-                    totalCoins: Number(pending.coins || 0),
-                    _localPending: true
-                });
-            }
-        }
 
         if (records.length === 0) {
             topCard.innerHTML = '<div class="dtt-loading">🎯 ဒီနေ့ ဘယ်သူမှ မကြည့်ရသေးပါ</div>';
@@ -1259,10 +1192,12 @@ async function loadDashboard() {
         const bonusClaimed = localStorage.getItem(bonusClaimedKey) === 'true';
 
         let claimBtnHtml = '';
-        if (isComplete && !bonusClaimed) {
+        if (isComplete && isMeTop && !bonusClaimed) {
             claimBtnHtml = `<button style="width:100%;padding:12px;border:none;border-radius:12px;background:linear-gradient(135deg,var(--mint-500),var(--mint-700));color:#fff;font-weight:700;font-size:13px;cursor:pointer;box-shadow:0 6px 20px rgba(16,185,129,0.4);margin-top:12px;display:flex;align-items:center;justify-content:center;gap:8px;" onclick="claimTopBonus(${TOP_BONUS})"><i class="fas fa-crown"></i> Bonus +${TOP_BONUS} Coins</button>`;
         } else if (bonusClaimed) {
             claimBtnHtml = `<div style="text-align:center;padding:12px;color:var(--mint-600);font-size:13px;font-weight:700;">✅ Bonus ရယူပြီးပါပြီ</div>`;
+        } else if (isComplete && !isMeTop) {
+            claimBtnHtml = `<button style="width:100%;padding:12px;border:none;border-radius:12px;background:var(--slate-200);color:var(--text-3);font-weight:700;font-size:13px;cursor:not-allowed;margin-top:12px;display:flex;align-items:center;justify-content:center;gap:8px;" disabled><i class="fas fa-lock"></i> Top 1 ဖြစ်မှ Bonus ရယူနိုင်ပါမည်</button>`;
         } else {
             claimBtnHtml = `<button style="width:100%;padding:12px;border:none;border-radius:12px;background:var(--slate-200);color:var(--text-3);font-weight:700;font-size:13px;cursor:not-allowed;margin-top:12px;display:flex;align-items:center;justify-content:center;gap:8px;" disabled><i class="fas fa-lock"></i> Ad ${TOP_BONUS_TARGET} ခု ကြည့်ပါ (${myCount}/${TOP_BONUS_TARGET})</button>`;
         }
@@ -1305,7 +1240,6 @@ async function loadDashboard() {
                         <div style="font-weight:700;color:var(--text-1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
                             ${r.username || 'User'}${isMe ? ' (You)' : ''}
                         </div>
-                        ${r.email ? `<div style="font-size:9px;color:var(--text-3);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${r.email}</div>` : ''}
                     </div>
                     <div style="background:var(--blue-500);color:#fff;padding:4px 10px;border-radius:999px;font-weight:800;font-size:10px;white-space:nowrap;">
                         ${r.count || 0} ads
@@ -1454,57 +1388,6 @@ function updateWithdrawUI() {
 // ============================================================
 //  EXCHANGE
 // ============================================================
-// CASHTUBE_WITHDRAW_CACHE_V1
-async function loadWithdrawControlCached(forceRefresh = false) {
-    const key = 'cachedWithdrawControl';
-    const ttl = 60 * 1000;
-
-    if (!forceRefresh) {
-        try {
-            const cached = JSON.parse(localStorage.getItem(key) || 'null');
-            if (cached && typeof cached.isOpen === 'boolean' &&
-                Date.now() - Number(cached.timestamp || 0) < ttl) {
-                isWithdrawOpen = cached.isOpen;
-                localStorage.setItem('isWithdrawOpen', String(isWithdrawOpen));
-                updateWithdrawUI();
-                return;
-            }
-        } catch (e) {}
-    }
-
-    try {
-        const w = await db.collection('settings').doc('withdrawControl').get();
-        let openDate = null;
-
-        if (w.exists) {
-            const data = w.data() || {};
-            if (typeof data.isOpen === 'boolean') isWithdrawOpen = data.isOpen;
-            openDate = data.openDate || null;
-        }
-
-        localStorage.setItem('isWithdrawOpen', String(isWithdrawOpen));
-        localStorage.setItem(key, JSON.stringify({
-            isOpen: isWithdrawOpen,
-            openDate,
-            timestamp: Date.now()
-        }));
-        updateWithdrawUI();
-    } catch (e) {
-        // Keep the last known status if the network read fails.
-    }
-}
-
-function cacheWithdrawControlStatus(open, openDate = null) {
-    isWithdrawOpen = Boolean(open);
-    localStorage.setItem('isWithdrawOpen', String(isWithdrawOpen));
-    localStorage.setItem('cachedWithdrawControl', JSON.stringify({
-        isOpen: isWithdrawOpen,
-        openDate,
-        timestamp: Date.now()
-    }));
-    updateWithdrawUI();
-}
-
 async function loadExchangeRate() {
     const cacheKey = 'cachedExchangeRate';
     const TTL = 5 * 60 * 1000;
@@ -1522,7 +1405,11 @@ async function loadExchangeRate() {
             updateExchangeRateUI();
             updateExchangeStatusUI();
             updateAdRewardUI();
-            await loadWithdrawControlCached();
+            try {
+                const w = await db.collection('settings').doc('withdrawControl').get();
+                if (w.exists && typeof w.data().isOpen === 'boolean') isWithdrawOpen = w.data().isOpen;
+                localStorage.setItem('isWithdrawOpen', isWithdrawOpen);
+            } catch (e) {}
             return;
         }
     } catch (e) {}
@@ -1556,7 +1443,11 @@ async function loadExchangeRate() {
     updateExchangeRateUI();
     updateExchangeStatusUI();
     updateAdRewardUI();
-    await loadWithdrawControlCached();
+    try {
+        const w = await db.collection('settings').doc('withdrawControl').get();
+        if (w.exists && typeof w.data().isOpen === 'boolean') isWithdrawOpen = w.data().isOpen;
+        localStorage.setItem('isWithdrawOpen', isWithdrawOpen);
+    } catch (e) {}
 }
 
 function updateExchangeRateUI() {
@@ -2085,21 +1976,6 @@ async function handleLogout() { await flushPendingAdRewards(true); await auth.si
 //  AUTH STATE
 // ============================================================
 auth.onAuthStateChanged(async (user) => {
-    const authGeneration = ++cashTubeAuthGeneration;
-
-    if (cashTubeUserSnapshotUnsubscribe) {
-        try { cashTubeUserSnapshotUnsubscribe(); } catch (e) {}
-        cashTubeUserSnapshotUnsubscribe = null;
-    }
-    if (cashTubeDailyBonusInterval) {
-        clearInterval(cashTubeDailyBonusInterval);
-        cashTubeDailyBonusInterval = null;
-    }
-    if (cashTubeSaveCoinsInterval) {
-        clearInterval(cashTubeSaveCoinsInterval);
-        cashTubeSaveCoinsInterval = null;
-    }
-
     if (user) {
         currentUser = user;
         document.getElementById('authScreen').classList.remove('active');
@@ -2148,13 +2024,10 @@ auth.onAuthStateChanged(async (user) => {
             }
         } catch (error) {}
 
-        // Restore any locally queued ad rewards before the first user snapshot.
+        // Keep pending rewards local until the Firestore batch succeeds.
+        // The user snapshot displays server balance plus pending rewards.
         const pendingOnLogin = getPendingAdRewards();
         if (pendingOnLogin.count > 0) {
-            userData.coins = (userData.coins || 0) + pendingOnLogin.coins;
-            userData.totalAds = (userData.totalAds || 0) + pendingOnLogin.count;
-            saveCoinsToLocal(userData.coins);
-            updateUI();
             await flushPendingAdRewards(true);
         }
 
@@ -2174,11 +2047,7 @@ auth.onAuthStateChanged(async (user) => {
         await loadAdLinksFromFirestore();
         await loadAppLinksFromFirestore();
 
-        if (authGeneration !== cashTubeAuthGeneration || !auth.currentUser ||
-            auth.currentUser.uid !== user.uid) return;
-
-        cashTubeUserSnapshotUnsubscribe = db.collection('users').doc(user.uid).onSnapshot((doc) => {
-            if (authGeneration !== cashTubeAuthGeneration) return;
+        db.collection('users').doc(user.uid).onSnapshot((doc) => {
             if (doc.exists) {
                 const d = doc.data();
                 const pendingLive = getPendingAdRewards();
@@ -2226,31 +2095,9 @@ auth.onAuthStateChanged(async (user) => {
         updateDailyBonusUI();
         loadDashboard();
 
-        if (authGeneration === cashTubeAuthGeneration) {
-            if (!cashTubeDailyBonusInterval) {
-                cashTubeDailyBonusInterval = setInterval(() => {
-                    if (currentUser) updateDailyBonusUI();
-                }, 60000);
-            }
-            if (!cashTubeSaveCoinsInterval) {
-                cashTubeSaveCoinsInterval = setInterval(() => {
-                    if (currentUser) saveCoinsToLocal(userData.coins);
-                }, 60000);
-            }
-        }
+        setInterval(() => updateDailyBonusUI(), 60000);
+        setInterval(() => saveCoinsToLocal(userData.coins), 60000);
     } else {
-        if (cashTubeUserSnapshotUnsubscribe) {
-            try { cashTubeUserSnapshotUnsubscribe(); } catch (e) {}
-            cashTubeUserSnapshotUnsubscribe = null;
-        }
-        if (cashTubeDailyBonusInterval) {
-            clearInterval(cashTubeDailyBonusInterval);
-            cashTubeDailyBonusInterval = null;
-        }
-        if (cashTubeSaveCoinsInterval) {
-            clearInterval(cashTubeSaveCoinsInterval);
-            cashTubeSaveCoinsInterval = null;
-        }
         currentUser = null;
         document.getElementById('authScreen').classList.add('active');
         document.getElementById('appContainer').classList.remove('active');
@@ -2368,7 +2215,86 @@ function handleAdminLockClick() {
 // ============================================================
 // REALCASH ANALYTICS
 // ============================================================
+// Cache admin analytics for 2 minutes to reduce repeated Firestore reads.
 async function loadRealcashAnalytics() {
+    if (!isAdmin) return;
+
+    const cacheKey = 'cashtube_admin_analytics_cache_v1';
+    const cacheTTL = 2 * 60 * 1000;
+    const ids = [
+        'analyticsUsers',
+        'analyticsActive',
+        'analyticsAds',
+        'analyticsCoins',
+        'analyticsWithdrawals',
+        'analyticsPending'
+    ];
+
+    try {
+        const raw = localStorage.getItem(cacheKey);
+        if (raw) {
+            const cached = JSON.parse(raw);
+
+            if (
+                cached &&
+                Date.now() - cached.time >= 0 &&
+                Date.now() - cached.time < cacheTTL &&
+                cached.values &&
+                ids.every(id =>
+                    cached.values[id] !== undefined &&
+                    cached.values[id] !== 'Error'
+                )
+            ) {
+                ids.forEach(id => {
+                    const el = document.getElementById(id);
+                    if (!el) return;
+                    el.textContent = cached.values[id];
+                    el.style.color = '#0f172a';
+                    el.style.fontWeight = '900';
+                    el.style.visibility = 'visible';
+                    el.style.opacity = '1';
+                });
+
+                const updated = document.getElementById('analyticsUpdated');
+                if (updated) {
+                    updated.textContent =
+                        'Cached • ' + cached.today + ' • Yangon Time';
+                    updated.style.color = '#64748b';
+                }
+
+                console.log('ADMIN ANALYTICS CACHE HIT');
+                return;
+            }
+        }
+    } catch (e) {
+        console.warn('ADMIN ANALYTICS CACHE READ FAILED:', e);
+    }
+
+    await loadRealcashAnalyticsFromFirestore();
+
+    try {
+        const values = {};
+        for (const id of ids) {
+            const el = document.getElementById(id);
+            if (!el || el.textContent.trim() === 'Error') return;
+            values[id] = el.textContent;
+        }
+
+        localStorage.setItem(cacheKey, JSON.stringify({
+            time: Date.now(),
+            today: new Intl.DateTimeFormat('en-CA', {
+                timeZone: 'Asia/Yangon'
+            }).format(new Date()),
+            values
+        }));
+
+        console.log('ADMIN ANALYTICS CACHE SAVED');
+    } catch (e) {
+        console.warn('ADMIN ANALYTICS CACHE SAVE FAILED:', e);
+    }
+}
+
+async function loadRealcashAnalyticsFromFirestore() {
     if (!isAdmin) return;
 
     const setValue = (id, value) => {
@@ -2627,17 +2553,14 @@ async function adminRemoveAdLink(i) {
     renderAdCards();
 }
 async function adminToggleWithdraw() {
-    const nextWithdrawOpen = !isWithdrawOpen;
+    isWithdrawOpen = !isWithdrawOpen;
+    localStorage.setItem('isWithdrawOpen', isWithdrawOpen);
     try {
         await db.collection('settings').doc('withdrawControl').set({
-            isOpen: nextWithdrawOpen,
+            isOpen: isWithdrawOpen,
             updatedAt: firebase.firestore.FieldValue.serverTimestamp()
         }, { merge: true });
-        cacheWithdrawControlStatus(nextWithdrawOpen);
-    } catch (e) {
-        showToast('❌ Withdrawal setting မသိမ်းနိုင်ပါ', 'error');
-        return;
-    }
+    } catch (e) {}
     document.getElementById('toggleWithdrawBtn').textContent = isWithdrawOpen ? '🔒 Close' : '🔓 Open';
     updateWithdrawUI();
 }
@@ -2645,18 +2568,15 @@ async function adminSetWithdrawDate() {
     const date = document.getElementById('adminWithdrawDate').value;
     if (!date) return;
     const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Yangon' }).format(new Date());
-    const nextWithdrawOpen = date <= today;
+    isWithdrawOpen = date <= today;
+    localStorage.setItem('isWithdrawOpen', isWithdrawOpen);
     try {
         await db.collection('settings').doc('withdrawControl').set({
-            isOpen: nextWithdrawOpen,
+            isOpen: isWithdrawOpen,
             openDate: date,
             updatedAt: firebase.firestore.FieldValue.serverTimestamp()
         }, { merge: true });
-        cacheWithdrawControlStatus(nextWithdrawOpen, date);
-    } catch (e) {
-        showToast('❌ Withdrawal date မသိမ်းနိုင်ပါ', 'error');
-        return;
-    }
+    } catch (e) {}
     updateWithdrawUI();
     showToast('✅ Set');
 }
@@ -2689,6 +2609,94 @@ function dailyTop3StatusText(status) {
     if (status === 'rejected') return '❌ Rejected';
     if (status === 'superseded') return '↪️ Updated ranking';
     return '⏳ Pending approval';
+}
+
+
+async function auditDailyTop3Counts() {
+    if (!isAdmin) {
+        showToast('❌ Admin login လုပ်ပါ', 'error');
+        return;
+    }
+
+    const statusEl = document.getElementById('dailyTop3RewardStatus');
+    if (statusEl) statusEl.textContent = 'နေ့စဉ် Ads Count များကို တိုက်စစ်နေပါသည်...';
+
+    try {
+        const today = dailyTop3Today();
+
+        const [adsSnap, publicSnap] = await Promise.all([
+            db.collection('adWatches').where('date', '==', today).get(),
+            db.collection('publicLeaderboard').where('date', '==', today).get()
+        ]);
+
+        const adsMap = new Map();
+        adsSnap.forEach(doc => {
+            const d = doc.data() || {};
+            const uid = d.userId || d.authUid;
+            if (!uid) return;
+
+            const count = Number(d.count || 0);
+            const coins = Number(d.totalCoins || 0);
+            if (!Number.isFinite(count) || count < 0) return;
+
+            const old = adsMap.get(uid) || { count: 0, coins: 0 };
+            old.count += count;
+            old.coins += Number.isFinite(coins) ? coins : 0;
+            adsMap.set(uid, old);
+        });
+
+        const publicMap = new Map();
+        publicSnap.forEach(doc => {
+            const d = doc.data() || {};
+            const uid = d.userId;
+            if (!uid) return;
+
+            publicMap.set(uid, {
+                count: Number(d.count || 0),
+                coins: Number(d.totalCoins || 0)
+            });
+        });
+
+        const uids = new Set([...adsMap.keys(), ...publicMap.keys()]);
+        const mismatches = [];
+
+        for (const uid of uids) {
+            const a = adsMap.get(uid) || { count: 0, coins: 0 };
+            const b = publicMap.get(uid) || { count: 0, coins: 0 };
+
+            if (a.count !== b.count || a.coins !== b.coins) {
+                mismatches.push({
+                    uid,
+                    adWatchesCount: a.count,
+                    publicCount: b.count,
+                    adWatchesCoins: a.coins,
+                    publicCoins: b.coins
+                });
+            }
+        }
+
+        console.table(mismatches);
+
+        const message = mismatches.length
+            ? `⚠️ ${today}: Count မတူသော User ${mismatches.length} ယောက်ရှိသည်။ Console ထဲတွင် အသေးစိတ်ကြည့်ပါ။`
+            : `✅ ${today}: adWatches ${adsMap.size} ယောက်၊ publicLeaderboard ${publicMap.size} ယောက်။ Count/Coins ကွာခြားမှု မတွေ့ပါ။`;
+
+        if (statusEl) statusEl.textContent = message;
+        console.log('Daily Top 3 audit:', {
+            date: today,
+            adWatchesUsers: adsMap.size,
+            publicLeaderboardUsers: publicMap.size,
+            mismatchCount: mismatches.length,
+            mismatches
+        });
+
+        showToast(message, mismatches.length ? 'error' : 'success');
+    } catch (e) {
+        console.error('DAILY TOP3 AUDIT ERROR:', e);
+        if (statusEl) {
+            statusEl.textContent = '❌ စစ်ဆေးမှု မအောင်မြင်ပါ: ' + (e.code || e.message);
+        }
+    }
 }
 
 async function prepareDailyTop3Rewards() {
