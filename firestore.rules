@@ -27,7 +27,11 @@ service cloud.firestore {
       allow create: if isOwner(uid);
       allow get: if isOwner(uid) || isAdmin();
       allow list: if isAdmin();
-      allow update: if isOwner(uid) || isAdmin();
+      // Users may update their normal profile/wallet fields, but cannot
+      // self-assign a VIP level. Only an Admin may change `level`.
+      allow update: if isAdmin()
+        || (isOwner(uid)
+          && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['level']));
       allow delete: if isAdmin();
     }
 
@@ -44,6 +48,18 @@ service cloud.firestore {
         || (signedIn() && id.matches('^' + request.auth.uid + '.*$'));
       allow create, update: if signedIn()
         && id.matches('^' + request.auth.uid + '.*$');
+      allow delete: if isAdmin();
+    }
+
+    match /levelUpgradeRequests/{id} {
+      allow create: if signedIn()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.status == 'pending'
+        && request.resource.data.amountMMK == 5000
+        && request.resource.data.toLevel == request.resource.data.fromLevel + 1;
+      allow read: if isAdmin()
+        || (signedIn() && resource.data.userId == request.auth.uid);
+      allow update: if isAdmin();
       allow delete: if isAdmin();
     }
 

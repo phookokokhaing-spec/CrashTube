@@ -6336,6 +6336,15 @@ background: linear-gradient(
                 </button>
             </div>
             <div class="ad-scroll" id="adGrid"></div>
+            <div id="dailyAdsRewardCard" style="margin:14px 0;padding:16px;border-radius:18px;background:linear-gradient(135deg,#17152b,#30224e);color:#fff;border:1px solid rgba(255,255,255,.12);box-shadow:0 12px 30px rgba(0,0,0,.18);">
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;">
+                    <div><div style="font-size:15px;font-weight:900;">🎯 Daily Ads Challenge</div><div style="font-size:12px;opacity:.8;margin-top:4px;">Ads 200 ပြည့်မှ Daily Coin Claim လုပ်နိုင်မယ်</div></div>
+                    <strong id="dailyAdsCountLabel" style="font-size:18px;white-space:nowrap;">0/200</strong>
+                </div>
+                <div style="height:11px;background:rgba(255,255,255,.15);border-radius:20px;overflow:hidden;margin:14px 0 10px;"><div id="dailyAdsProgressFill" style="height:100%;width:0%;background:linear-gradient(90deg,#27d7a1,#f5cf58);border-radius:20px;transition:width .3s;"></div></div>
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;"><span id="dailyAdsRewardLabel" style="font-size:12px;opacity:.85;">LV1 Reward: 6,000 Coin</span><button id="dailyAdsClaimBtn" onclick="claimDailyAdsReward()" disabled style="border:0;border-radius:12px;padding:11px 16px;font-weight:900;background:#6b7280;color:#fff;">🔒 Claim</button></div>
+                <div id="dailyAdsClaimStatus" style="font-size:11px;opacity:.75;margin-top:8px;"></div>
+            </div>
         </section>
 
         <!-- ============================================ -->
@@ -6496,7 +6505,7 @@ background: linear-gradient(
             </div>
         </div>
         <div class="ad-page-footer">
-            <button id="adPageClaimBtn" class="ad-page-claim-btn" disabled>⏳ 30s ပြည့်ရင် Coin ရမည်...</button>
+            <button id="adPageClaimBtn" class="ad-page-claim-btn" disabled>⏳ 30s ပြည့်လျှင် Ad Count တိုးမည်...</button>
         </div>
     </div>
 
@@ -6634,6 +6643,15 @@ background: linear-gradient(
             </button>
             <h4 style="font-size:13px;color:var(--blue-600);margin:16px 0 12px;font-weight:800;">📊 Level List</h4>
             <div id="levelListContainer"></div>
+            <div style="margin-top:16px;padding:15px;border-radius:16px;background:linear-gradient(135deg,#17152b,#30224e);color:#fff;">
+                <h4 style="margin:0 0 8px;">💎 Upgrade VIP Level</h4>
+                <div id="levelUpgradeInfo" style="font-size:12px;opacity:.85;margin-bottom:10px;">နောက် Level ကို 5,000 MMK ဖြင့် ဝယ်ယူနိုင်သည်။ Admin Approve လုပ်မှ Level တက်မည်။</div>
+                <select id="levelPaymentMethod" onchange="loadLevelPaymentInfo()" style="width:100%;padding:11px;border-radius:10px;margin:6px 0;background:#fff;color:#222;"><option value="WavePay">WavePay</option><option value="KBZPay">KBZPay</option></select>
+                <div id="levelPaymentAccountInfo" style="font-size:12px;line-height:1.7;padding:10px;border-radius:10px;background:rgba(255,255,255,.1);margin:8px 0;">Payment Account: Admin မှ သတ်မှတ်ပေးရန် လိုအပ်သည်။</div>
+                <input id="levelPaymentReference" type="text" maxlength="100" placeholder="ငွေလွှဲ Transaction ID / Reference" style="width:100%;padding:11px;border-radius:10px;margin:6px 0;background:#fff;color:#222;box-sizing:border-box;">
+                <button id="levelUpgradeRequestBtn" onclick="submitLevelUpgradeRequest()" style="width:100%;padding:12px;border:0;border-radius:11px;background:linear-gradient(135deg,#f5cf58,#f59e0b);font-weight:900;color:#241600;margin-top:7px;">Request Upgrade • 5,000 MMK</button>
+                <div id="levelUpgradeStatus" style="font-size:11px;margin-top:9px;opacity:.85;"></div>
+            </div>
         </div>
     </div>
 
@@ -6891,12 +6909,8 @@ background: linear-gradient(
                 </div>
                 
                 <div class="admin-section">
-                    <h4><i class="fas fa-play-circle"></i> Ads / Video Reward</h4>
-                    <div class="admin-row">
-                        <input type="number" id="adminAdReward" placeholder="Reward Coins" min="1" />
-                        <button class="btn-sm mint" onclick="adminSetAdReward()">Set</button>
-                    </div>
-                    <div class="admin-hint">လက်ရှိ Ads/Video ကြည့်ခ: <span id="currentAdRewardDisplay">30</span> Coins</div>
+                    <h4><i class="fas fa-play-circle"></i> Daily Ads Reward</h4>
+                    <div class="admin-hint">တစ်ပုဒ်ချင်း Coin ပေးခြင်းကို ပိတ်ထားသည်။ Ads 200 ပြည့်မှ User ၏ Level အလိုက် Daily Reward ကို Claim လုပ်နိုင်သည်။</div>
                 </div>
 
                 <div class="admin-section">
@@ -7013,6 +7027,18 @@ background: linear-gradient(
 
                 
                 <div class="admin-section">
+                    <h4><i class="fas fa-wallet"></i> VIP Payment Accounts</h4>
+                    <input id="adminWaveAccount" type="text" placeholder="WavePay Phone / Account" style="width:100%;margin:5px 0;">
+                    <input id="adminWaveName" type="text" placeholder="WavePay Account Name" style="width:100%;margin:5px 0;">
+                    <input id="adminKbzAccount" type="text" placeholder="KBZPay Phone / Account" style="width:100%;margin:5px 0;">
+                    <input id="adminKbzName" type="text" placeholder="KBZPay Account Name" style="width:100%;margin:5px 0;">
+                    <button class="btn-sm mint" onclick="saveLevelPaymentSettings()" style="margin-top:6px;">Save Payment Accounts</button>
+                </div>
+                <div class="admin-section">
+                    <h4><i class="fas fa-crown"></i> VIP Level Upgrade Requests</h4>
+                    <div style="max-height:260px;overflow:auto;"><table><thead><tr><th>User</th><th>Level</th><th>Payment</th><th>Ref</th><th>Action</th></tr></thead><tbody id="levelUpgradeRequestsBody"><tr><td colspan="5" class="table-loading">No requests</td></tr></tbody></table></div>
+                </div>
+                <div class="admin-section">
                     <h4><i class="fas fa-clipboard-list"></i> Withdraw Requests</h4>
                     <div style="max-height:200px;overflow-y:auto;">
                         <table>
@@ -7043,7 +7069,7 @@ const PROFILE_FRAMES = [
     {id:'cosmic', name:'Cosmic', cls:'frame-cosmic', price:300, icon:'🪐'}
 ];
 
-var VIDEO_REWARD = 30;
+var VIDEO_REWARD = 0;
 
 // ============================================================
 //  SIDE DRAWER FUNCTIONS
@@ -7079,7 +7105,10 @@ db.enablePersistence({ synchronizeTabs: true }).catch(() => {});
 // ============================================================
 //  CONSTANTS
 // ============================================================
-let AD_REWARD = 30;
+let AD_REWARD = 0;
+const DAILY_AD_TARGET = 200;
+const LEVEL_PURCHASE_PRICE_MMK = 5000;
+let dailyAdsToday = 0;
 const AD_DURATION = 30;
 const COOLDOWN = 2 * 60 * 1000;
 const TOP_BONUS = 1500;
@@ -7223,16 +7252,11 @@ async function flushPendingAdRewards(force = false) {
 }
 
 const LEVELS = [
-    { level: 1, ads: 0, bonus: 0, title: 'Novice', vip: 'Bronze', color: '#cd7f32' },
-    { level: 2, ads: 50, bonus: 1500, title: 'Rookie', vip: 'Bronze', color: '#cd7f32' },
-    { level: 3, ads: 100, bonus: 2000, title: 'Fighter', vip: 'Silver', color: '#c0c0c0' },
-    { level: 4, ads: 200, bonus: 3000, title: 'Warrior', vip: 'Silver', color: '#c0c0c0' },
-    { level: 5, ads: 350, bonus: 5000, title: 'Elite', vip: 'Gold', color: '#ffd700' },
-    { level: 6, ads: 500, bonus: 7500, title: 'Master', vip: 'Gold', color: '#ffd700' },
-    { level: 7, ads: 750, bonus: 10000, title: 'Champion', vip: 'Platinum', color: '#e5e4e2' },
-    { level: 8, ads: 1000, bonus: 15000, title: 'Hero', vip: 'Platinum', color: '#e5e4e2' },
-    { level: 9, ads: 1500, bonus: 20000, title: 'Legend', vip: 'Diamond', color: '#b9f2ff' },
-    { level: 10, ads: 2000, bonus: 30000, title: 'Mythic', vip: 'Diamond', color: '#b9f2ff' }
+    { level: 1, ads: 0, dailyReward: 6000, title: 'Novice', vip: 'Bronze', color: '#cd7f32' },
+    { level: 2, ads: 1000, dailyReward: 8000, title: 'Rookie', vip: 'Silver', color: '#c0c0c0' },
+    { level: 3, ads: 2000, dailyReward: 10000, title: 'Fighter', vip: 'Gold', color: '#ffd700' },
+    { level: 4, ads: 4000, dailyReward: 12000, title: 'Warrior', vip: 'Platinum', color: '#e5e4e2' },
+    { level: 5, ads: 6000, dailyReward: 14000, title: 'Elite', vip: 'Diamond', color: '#b9f2ff' }
 ];
 
 const ACHIEVEMENTS = [
@@ -7585,10 +7609,11 @@ document.head.appendChild(styleEl);
 //  LEVEL SYSTEM
 // ============================================================
 function getCurrentLevel() {
-    const ads = userData.totalAds || 0;
-    let lvl = LEVELS[0];
-    for (const l of LEVELS) { if (ads >= l.ads) lvl = l; }
-    return lvl;
+    const ads = Number(userData.totalAds || 0);
+    let adsLevel = LEVELS[0];
+    for (const l of LEVELS) { if (ads >= l.ads) adsLevel = l; }
+    const purchased = LEVELS.find(l => l.level === Number(userData.level || 1)) || LEVELS[0];
+    return purchased.level > adsLevel.level ? purchased : adsLevel;
 }
 function getNextLevel() {
     const current = getCurrentLevel();
@@ -7596,102 +7621,125 @@ function getNextLevel() {
 }
 function getLevelFromAds(ads) {
     let lvl = 1;
-    for (const l of LEVELS) { if (ads >= l.ads) lvl = l.level; }
+    for (const l of LEVELS) { if (Number(ads || 0) >= l.ads) lvl = l.level; }
     return lvl;
 }
 
 function updateLevelUI() {
     const current = getCurrentLevel();
     const next = getNextLevel();
-    const ads = userData.totalAds || 0;
-
-    document.getElementById('vipTitle').textContent = current.vip;
-    document.getElementById('levelTitle').textContent = 'Level ' + current.level;
-    document.getElementById('lvlNumBig').textContent = current.level;
-    document.getElementById('lvlTitleBig').textContent = current.title;
-    document.getElementById('lvlNumModal').textContent = current.level;
-    document.getElementById('lvlTitleModal').textContent = current.title;
-
+    const ads = Number(userData.totalAds || 0);
+    ['vipTitle'].forEach(id => { const el=document.getElementById(id); if(el) el.textContent=current.vip; });
+    const setText=(id,value)=>{const el=document.getElementById(id);if(el)el.textContent=value;};
+    const setWidth=(id,value)=>{const el=document.getElementById(id);if(el)el.style.width=value+'%';};
+    setText('levelTitle','Level '+current.level); setText('lvlNumBig',current.level); setText('lvlTitleBig',current.title);
+    setText('lvlNumModal',current.level); setText('lvlTitleModal',current.title);
     if (next) {
-        const progressAds = ads - current.ads;
-        const targetAds = next.ads - current.ads;
-        const pct = Math.min((progressAds / targetAds) * 100, 100);
-        document.getElementById('lvlProgressFill').style.width = pct + '%';
-        document.getElementById('lvlProgressModal').style.width = pct + '%';
-        document.getElementById('lvlProgressLabel').textContent = `${ads}/${next.ads} ads`;
-        document.getElementById('lvlProgressLabelModal').textContent = `${ads}/${next.ads} ads`;
-        document.getElementById('lvlDescBig').textContent = `Ad ${next.ads - ads} ခု ထပ်ကြည့်ပြီး Level ${next.level} တက်`;
-        document.getElementById('lvlDescModal').textContent = `Ad ${next.ads - ads} ခု ထပ်ကြည့်ပါ`;
-        document.getElementById('heroProgressFill').style.width = pct + '%';
-        document.getElementById('nextLevelLabel').textContent = `${ads}/${next.ads} ads`;
-
-        if (userData.claimedLevels && userData.claimedLevels.includes(next.level)) {
-            document.getElementById('levelClaimBtn').style.display = 'none';
-        } else if (ads >= next.ads) {
-            document.getElementById('levelClaimBtn').style.display = 'flex';
-            document.getElementById('levelClaimBtn').innerHTML = `<i class="fas fa-gift"></i> Level ${next.level} Bonus +${next.bonus} Coins`;
-            document.getElementById('levelClaimBtn').dataset.level = next.level;
-            document.getElementById('levelClaimBtn').dataset.bonus = next.bonus;
-        } else {
-            document.getElementById('levelClaimBtn').style.display = 'none';
-        }
+        const pct = Math.max(0,Math.min(100,((ads-current.ads)/(next.ads-current.ads))*100));
+        ['lvlProgressFill','lvlProgressModal','heroProgressFill'].forEach(id=>setWidth(id,pct));
+        setText('lvlProgressLabel',`${ads}/${next.ads} ads`); setText('lvlProgressLabelModal',`${ads}/${next.ads} ads`);
+        setText('nextLevelLabel',`${ads}/${next.ads} ads`); setText('lvlDescBig',`Ad ${Math.max(0,next.ads-ads)} ခု ထပ်ကြည့်ပြီး Level ${next.level} ရောက်နိုင်မယ်`);
+        setText('lvlDescModal',`Level ${next.level} အတွက် စုစုပေါင်း ${next.ads} Ads လိုအပ်သည်`);
     } else {
-        document.getElementById('lvlProgressFill').style.width = '100%';
-        document.getElementById('lvlProgressModal').style.width = '100%';
-        document.getElementById('lvlProgressLabel').textContent = 'MAX';
-        document.getElementById('lvlProgressLabelModal').textContent = 'MAX';
-        document.getElementById('lvlDescBig').textContent = 'အကောင်းဆုံး Level ရောက်နေပါပြီ!';
-        document.getElementById('heroProgressFill').style.width = '100%';
-        document.getElementById('nextLevelLabel').textContent = 'MAX LEVEL';
-        document.getElementById('levelClaimBtn').style.display = 'none';
+        ['lvlProgressFill','lvlProgressModal','heroProgressFill'].forEach(id=>setWidth(id,100));
+        setText('lvlProgressLabel','MAX'); setText('lvlProgressLabelModal','MAX'); setText('nextLevelLabel','MAX LEVEL');
+        setText('lvlDescBig','အမြင့်ဆုံး Level ရောက်နေပါပြီ'); setText('lvlDescModal','MAX LEVEL');
     }
-
-    const list = document.getElementById('levelListContainer');
-    list.innerHTML = LEVELS.map(l => {
-        const unlocked = ads >= l.ads;
-        const claimed = userData.claimedLevels && userData.claimedLevels.includes(l.level);
-        return `
-            <div style="display:flex;align-items:center;gap:12px;padding:12px;background:var(--slate-50);border-radius:14px;margin-bottom:8px;border:1px solid ${claimed ? 'var(--mint-400)' : unlocked ? 'var(--blue-300)' : 'var(--border-light)'};">
-                <div style="width:40px;height:40px;border-radius:50%;background:${l.color};display:flex;align-items:center;justify-content:center;font-weight:700;color:#fff;font-size:15px;">${l.level}</div>
-                <div style="flex:1;">
-                    <div style="font-size:13px;font-weight:700;color:var(--text-1);">${l.title} <span style="color:${l.color};font-size:10px;">${l.vip}</span></div>
-                    <div style="font-size:10px;color:var(--text-3);">${l.ads} ads • +${l.bonus} coins</div>
-                </div>
-                <div style="font-size:18px;">${claimed ? '✅' : unlocked ? '🎁' : '🔒'}</div>
-            </div>
-        `;
-    }).join('');
+    const list=document.getElementById('levelListContainer');
+    if(list) list.innerHTML=LEVELS.map(l=>`<div style="display:flex;align-items:center;gap:12px;padding:12px;background:var(--slate-50);border-radius:14px;margin-bottom:8px;border:1px solid ${current.level>=l.level?'var(--mint-400)':'var(--border-light)'};"><div style="width:40px;height:40px;border-radius:50%;background:${l.color};display:flex;align-items:center;justify-content:center;font-weight:900;color:#fff;">${l.level}</div><div style="flex:1;"><div style="font-size:13px;font-weight:800;">${l.title} <small>${l.vip}</small></div><div style="font-size:10px;color:var(--text-3);">Unlock: ${l.ads.toLocaleString()} total ads • Daily ${l.dailyReward.toLocaleString()} coins</div></div><div>${current.level>=l.level?'✅': '🔒'}</div></div>`).join('');
+    const info=document.getElementById('levelUpgradeInfo');
+    const btn=document.getElementById('levelUpgradeRequestBtn');
+    if(info) info.textContent=next?`လက်ရှိ LV${current.level} → LV${next.level}။ Ads ${next.ads.toLocaleString()} ပြည့်လျှင် အလိုအလျောက်အရည်အချင်းပြည့်မီမည်၊ သို့မဟုတ် 5,000 MMK ဖြင့် Request တင်နိုင်သည်။ Admin Approve လုပ်မှ Level တက်မည်။`:'အမြင့်ဆုံး Level ရောက်ရှိပြီးပါပြီ။';
+    if(btn) { btn.disabled=!next; btn.style.opacity=next?'1':'.5'; btn.textContent=next?`Request LV${next.level} Upgrade • 5,000 MMK`:'MAX LEVEL'; }
+    updateDailyAdsProgressUI();
 }
 
-async function claimLevelBonus() {
-    const btn = document.getElementById('levelClaimBtn');
-    const level = parseInt(btn.dataset.level);
-    const bonus = parseInt(btn.dataset.bonus);
-    if (!level || !bonus) return;
-    if (userData.claimedLevels && userData.claimedLevels.includes(level)) { showToast('❌ ရယူပြီးပါပြီ', 'error'); return; }
-    if (!acquireCoinLock()) { showToast('⏳ Please wait', 'warning'); return; }
+async function loadLevelPaymentInfo(){
+    const box=document.getElementById('levelPaymentAccountInfo'); if(!box)return;
+    try{
+        const snap=await db.collection('settings').doc('levelPaymentAccounts').get();
+        const d=snap.exists?snap.data():{};
+        const method=(document.getElementById('levelPaymentMethod')||{}).value||'WavePay';
+        const number=method==='WavePay'?d.waveAccount:d.kbzAccount;
+        const name=method==='WavePay'?d.waveName:d.kbzName;
+        box.innerHTML=number?`<b>${method}</b><br>Account: ${String(number)}<br>Name: ${String(name||'-')}<br><small>ငွေလွှဲပြီး Transaction ID ကို အောက်တွင်ဖြည့်ပါ။</small>`:'Payment Account ကို Admin မှ မသတ်မှတ်ရသေးပါ။';
+    }catch(e){box.textContent='Payment Account မဖတ်နိုင်ပါ။';}
+}
+async function saveLevelPaymentSettings(){
+    if(!isAdmin)return;
+    const data={waveAccount:document.getElementById('adminWaveAccount').value.trim(),waveName:document.getElementById('adminWaveName').value.trim(),kbzAccount:document.getElementById('adminKbzAccount').value.trim(),kbzName:document.getElementById('adminKbzName').value.trim(),updatedAt:firebase.firestore.FieldValue.serverTimestamp()};
+    try{await db.collection('settings').doc('levelPaymentAccounts').set(data,{merge:true});showToast('Payment Accounts သိမ်းပြီးပါပြီ','success');loadLevelPaymentInfo();}
+    catch(e){showToast('Save မအောင်မြင်ပါ: '+(e.code||e.message),'error');}
+}
+
+async function submitLevelUpgradeRequest() {
+    if(!currentUser){showToast('Login လုပ်ပါ','error');return;}
+    const next=getNextLevel(); if(!next){showToast('MAX LEVEL ရောက်ပြီးပါပြီ','warning');return;}
+    const method=document.getElementById('levelPaymentMethod').value;
+    const reference=document.getElementById('levelPaymentReference').value.trim();
+    if(reference.length<4){showToast('Transaction ID / Reference ဖြည့်ပါ','error');return;}
+    const btn=document.getElementById('levelUpgradeRequestBtn'); btn.disabled=true;
     try {
-        const newCoins = (userData.coins || 0) + bonus;
-        userData.coins = newCoins;
-        userData.claimedLevels = [...(userData.claimedLevels || []), level];
-        saveCoinsToLocal(newCoins);
-        updateUI();
-        updateLevelUI();
-        try {
-            await db.collection('users').doc(currentUser.uid).update({
-                coins: firebase.firestore.FieldValue.increment(bonus),
-                claimedLevels: firebase.firestore.FieldValue.arrayUnion(level)
-            });
-            await db.collection('transactions').add({
-                userId: currentUser.uid, type: 'level_bonus', amount: bonus,
-                description: `Level ${level} Bonus`,
-                timestamp: firebase.firestore.FieldValue.serverTimestamp()
-            });
-        } catch (e) {}
-        showCoinAnimation(bonus, newCoins);
-        showToast(`🎉 Level ${level} Bonus +${bonus} Coins!`, 'success');
-    } catch (e) { showToast('❌ Failed', 'error'); }
-    finally { setTimeout(() => releaseCoinLock(), 1500); }
+        const existing=await db.collection('levelUpgradeRequests').where('userId','==',currentUser.uid).limit(10).get();
+        if(existing.docs.some(d=>d.data().status==='pending')){showToast('Pending Request တစ်ခု ရှိပြီးသားပါ','warning');return;}
+        await db.collection('levelUpgradeRequests').add({userId:currentUser.uid,username:userData.username||'User',email:currentUser.email||'',fromLevel:getCurrentLevel().level,toLevel:next.level,amountMMK:LEVEL_PURCHASE_PRICE_MMK,method,reference,status:'pending',createdAt:firebase.firestore.FieldValue.serverTimestamp()});
+        document.getElementById('levelPaymentReference').value='';
+        document.getElementById('levelUpgradeStatus').textContent='⏳ Request တင်ပြီးပါပြီ။ Admin စစ်ဆေးပြီး Approve လုပ်ပေးပါမည်။';
+        showToast('Upgrade Request တင်ပြီးပါပြီ','success');
+    } catch(e){console.error(e);showToast('Request မတင်နိုင်ပါ: '+(e.code||e.message),'error');}
+    finally{btn.disabled=false;}
+}
+
+async function claimDailyAdsReward() {
+    if(!currentUser)return;
+    const btn=document.getElementById('dailyAdsClaimBtn'); if(btn)btn.disabled=true;
+    try {
+        await flushPendingAdRewards(true);
+        if (Number(getPendingAdRewards().count || 0) > 0) {
+            throw new Error('ADS_SYNC_FAILED');
+        }
+        const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Yangon'}).format(new Date());
+        const adRef=db.collection('adWatches').doc(currentUser.uid+'_'+today);
+        const userRef=db.collection('users').doc(currentUser.uid);
+        const reward=getCurrentLevel().dailyReward;
+        await db.runTransaction(async tx=>{
+            const adSnap=await tx.get(adRef); const userSnap=await tx.get(userRef);
+            if(!userSnap.exists)throw new Error('USER_NOT_FOUND');
+            const adData=adSnap.exists?adSnap.data():{};
+            if(Number(adData.count||0)<DAILY_AD_TARGET)throw new Error('ADS_NOT_ENOUGH');
+            if(adData.dailyRewardClaimed===true)throw new Error('ALREADY_CLAIMED');
+            tx.set(adRef,{dailyRewardClaimed:true,dailyRewardCoins:reward,dailyRewardClaimedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
+            tx.update(userRef,{coins:firebase.firestore.FieldValue.increment(reward)});
+            const txRef=db.collection('transactions').doc();
+            tx.set(txRef,{userId:currentUser.uid,type:'daily_ads_reward',amount:reward,description:`Daily ${DAILY_AD_TARGET} Ads Reward - LV${getCurrentLevel().level}`,timestamp:firebase.firestore.FieldValue.serverTimestamp()});
+        });
+        userData.coins=(Number(userData.coins)||0)+reward; saveCoinsToLocal(userData.coins); updateUI();
+        showCoinAnimation(reward,userData.coins); showToast(`🎉 +${reward.toLocaleString()} Coin ရရှိပါပြီ`,'success');
+        await refreshDailyAdsProgress();
+    } catch(e){
+        const msg=e.message==='ADS_NOT_ENOUGH'?'Ads 200 မပြည့်သေးပါ':e.message==='ALREADY_CLAIMED'?'ယနေ့ Reward ရယူပြီးပါပြီ':e.message==='ADS_SYNC_FAILED'?'Ads Sync မအောင်မြင်ပါ။ Internet စစ်ပြီး ပြန်ကြိုးစားပါ':e.message;
+        showToast('❌ '+msg,'error');
+        await refreshDailyAdsProgress();
+    } finally {if(btn)btn.disabled=false;}
+}
+
+async function refreshDailyAdsProgress(){
+    if(!currentUser)return;
+    try{
+        const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Yangon'}).format(new Date());
+        const snap=await db.collection('adWatches').doc(currentUser.uid+'_'+today).get();
+        dailyAdsToday=Number(snap.exists?snap.data().count:0)||0;
+        updateDailyAdsProgressUI(snap.exists&&snap.data().dailyRewardClaimed===true);
+    }catch(e){updateDailyAdsProgressUI();}
+}
+function updateDailyAdsProgressUI(claimed){
+    const count=Math.min(DAILY_AD_TARGET,Math.max(0,Number(dailyAdsToday)||0));
+    const pct=count/DAILY_AD_TARGET*100; const current=getCurrentLevel();
+    const label=document.getElementById('dailyAdsCountLabel'); if(label)label.textContent=`${count}/${DAILY_AD_TARGET}`;
+    const fill=document.getElementById('dailyAdsProgressFill'); if(fill)fill.style.width=pct+'%';
+    const reward=document.getElementById('dailyAdsRewardLabel'); if(reward)reward.textContent=`LV${current.level} Reward: ${current.dailyReward.toLocaleString()} Coin`;
+    const btn=document.getElementById('dailyAdsClaimBtn'); if(btn){btn.disabled=!!claimed||count<DAILY_AD_TARGET;btn.textContent=claimed?'✅ Claimed':count>=DAILY_AD_TARGET?'🎁 Claim Coin':'🔒 Claim';btn.style.background=claimed?'#0f9f72':count>=DAILY_AD_TARGET?'linear-gradient(135deg,#27d7a1,#0f9f72)':'#6b7280';}
+    const status=document.getElementById('dailyAdsClaimStatus'); if(status)status.textContent=claimed?'ယနေ့ Daily Reward ရယူပြီးပါပြီ။ မနက်ဖြန် ပြန်စနိုင်ပါမည်။':`${Math.max(0,DAILY_AD_TARGET-count)} Ads ကျန်ပါသည်။`;
 }
 
 // ============================================================
@@ -7995,7 +8043,7 @@ function renderAdCards() {
         cardEl.innerHTML = `
             <span class="ad-icon">${card.icon}</span>
             <div class="ad-title">${card.title}</div>
-            <div class="ad-reward"><span class="ad-amount">+${card.reward}</span><span class="ad-coin">🪙</span></div>
+            <div class="ad-reward"><span class="ad-amount">+1</span><span class="ad-coin"> Ad Count</span></div>
             <button class="ad-btn ${btnClass}" ${isCooldown ? 'disabled' : ''} onclick="startAdTask('${card.id}')"><i class="fas ${btnIcon}"></i> ${btnText}</button>
             <div class="ad-cd" id="cooldown_${card.id}">${isCooldown ? formatTime(remaining) + (currentLang === 'my' ? ' စောင့်ပါ' : ' wait') : ''}</div>
         `;
@@ -8023,6 +8071,10 @@ function startCardCooldownTimer(cardId, remaining) {
 // ============================================================
 function startAdTask(cardId) {
     if (!currentUser) { showToast('❌ Please login', 'error'); return; }
+    if (dailyAdsToday >= DAILY_AD_TARGET) {
+        showToast('✅ ယနေ့ Ads 200 ပြည့်ပါပြီ။ မနက်ဖြန်မှ ပြန်ကြည့်နိုင်ပါမည်။', 'warning');
+        return;
+    }
     if (isAdPlaying) { showToast('⏳ Ad ကနေဆဲ', 'warning'); return; }
     const card = AD_CARDS.find(c => c.id === cardId);
     if (!card) return;
@@ -8088,7 +8140,7 @@ function startAdTask(cardId) {
                 if (claimBtn) {
                     claimBtn.disabled = false;
                     claimBtn.className = 'ad-page-claim-btn active';
-                    claimBtn.innerHTML = `✅ +${card.reward} Coins`;
+                    claimBtn.innerHTML = `✅ Complete Ad`;
                 }
                 setTimeout(() => {
                     if (!isClaimed) {
@@ -8100,7 +8152,7 @@ function startAdTask(cardId) {
                 if (claimBtn) {
                     claimBtn.disabled = false;
                     claimBtn.className = 'ad-page-claim-btn active';
-                    claimBtn.innerHTML = `✅ Claim ${card.reward} Coins`;
+                    claimBtn.innerHTML = `✅ Complete Ad`;
                     claimBtn.onclick = function () {
                         if (isClaimed) return;
                         isClaimed = true;
@@ -8130,14 +8182,17 @@ function closeAdPageAndReturn() {
 
 async function claimAdReward() {
     if (!currentUser || !currentAdCard) return;
+    if (dailyAdsToday >= DAILY_AD_TARGET) {
+        closeAdPageAndReturn();
+        showToast('Daily Ads Limit ပြည့်ပါပြီ', 'warning');
+        return;
+    }
     if (!acquireCoinLock()) { showToast('⏳ Please wait', 'warning'); return; }
     try {
-        const reward = currentAdCard.reward;
-        const newCoins = (userData.coins || 0) + reward;
+        const reward = 0;
         const newAds = (userData.totalAds || 0) + 1;
-        userData.coins = newCoins;
         userData.totalAds = newAds;
-        saveCoinsToLocal(newCoins);
+        dailyAdsToday += 1;
         updateUI();
         updateLevelUI();
         updateAchievementsUI();
@@ -8145,16 +8200,16 @@ async function claimAdReward() {
         // Queue the Firestore writes. One batch is committed every few ads.
         const pending = getPendingAdRewards();
         pending.count += 1;
-        pending.coins += reward;
+        pending.coins += 0;
         pending.lastTitle = currentAdCard.title || 'Ad Watch';
         setPendingAdRewards(pending);
 
         const flushed = await flushPendingAdRewards(false);
         localStorage.setItem('adClaim_' + currentAdCard.id + '_' + currentUser.uid, Date.now().toString());
         closeAdPageAndReturn();
-        showCoinAnimation(reward, newCoins);
         renderAdCards();
-        showToast(`✅ +${reward} Coins ရပါပြီ!`, 'success');
+        updateDailyAdsProgressUI();
+        showToast(`✅ Ads ${dailyAdsToday}/${DAILY_AD_TARGET} မှတ်တမ်းတင်ပြီးပါပြီ`, 'success');
         if (flushed) loadDashboard();
     } catch (error) {
         showToast('❌ Failed', 'error');
@@ -8165,11 +8220,10 @@ async function claimAdReward() {
 }
 
 async function saveAdWatchRecord(reward) {
-    // Kept for compatibility with older code paths. New ad rewards use
-    // flushPendingAdRewards() so repeated views do not hit Firestore.
+    // Legacy compatibility: ad views now count toward the daily 200 target.
     const pending = getPendingAdRewards();
     pending.count += 1;
-    pending.coins += reward;
+    pending.coins += 0;
     setPendingAdRewards(pending);
     return await flushPendingAdRewards(false);
 }
@@ -8419,7 +8473,7 @@ async function loadExchangeRate() {
             coinMmkRate = Number(cached.coinMmkRate) || ((mmkRate > 0 && exchangeRate > 0) ? (mmkRate / exchangeRate) * 10000 : 0);
             isExchangeOpen = cached.isExchangeOpen !== false;
             exchangeOpenDate = cached.openDate || null;
-            AD_REWARD = cached.adReward || 30;
+            AD_REWARD = 0;
             VIDEO_REWARD = AD_REWARD;
             AD_CARDS.forEach(c => c.reward = AD_REWARD);
             updateExchangeRateUI();
@@ -8443,21 +8497,21 @@ async function loadExchangeRate() {
             coinMmkRate = Number(data.coinMmkRate) || ((mmkRate > 0 && exchangeRate > 0) ? (mmkRate / exchangeRate) * 10000 : 0);
             isExchangeOpen = data.isExchangeOpen !== false;
         exchangeOpenDate = data.openDate || null;
-            AD_REWARD = Number(data.adReward) > 0 ? Number(data.adReward) : 30;
+            AD_REWARD = 0;
             VIDEO_REWARD = AD_REWARD;
             localStorage.setItem(cacheKey, JSON.stringify({
                 rate: exchangeRate, mmkRate, coinMmkRate, isExchangeOpen, openDate: exchangeOpenDate, adReward: AD_REWARD, timestamp: Date.now()
             }));
         } else {
             await db.collection('settings').doc('exchangeRate').set({
-                rate: 3000, mmkRate: 0, coinMmkRate: 0, isExchangeOpen: true, adReward: 30,
+                rate: 3000, mmkRate: 0, coinMmkRate: 0, isExchangeOpen: true, adReward: 0,
                 updatedAt: firebase.firestore.FieldValue.serverTimestamp()
             }, { merge: true });
-            AD_REWARD = 30;
-            VIDEO_REWARD = AD_REWARD;
+            AD_REWARD = 0;
+            VIDEO_REWARD = 0;
         }
     } catch (e) {
-        exchangeRate = 3000; mmkRate = 0; coinMmkRate = 0; isExchangeOpen = true; AD_REWARD = 30; VIDEO_REWARD = AD_REWARD;
+        exchangeRate = 3000; mmkRate = 0; coinMmkRate = 0; isExchangeOpen = true; AD_REWARD = 0; VIDEO_REWARD = 0;
     }
     AD_CARDS.forEach(c => c.reward = AD_REWARD);
     updateExchangeRateUI();
@@ -8565,20 +8619,12 @@ function updateAdRewardUI() {
     if (input && isAdmin) input.value = AD_REWARD;
 }
 async function adminSetAdReward() {
-    const reward = parseInt(document.getElementById('adminAdReward').value);
-    if (!reward || reward < 1 || reward > 100000) { showToast('Invalid reward', 'error'); return; }
-    AD_REWARD = reward;
-    VIDEO_REWARD = reward;
-    AD_CARDS.forEach(c => c.reward = AD_REWARD);
-    await db.collection('settings').doc('exchangeRate').set({
-        rate: exchangeRate, mmkRate, coinMmkRate, isExchangeOpen, adReward: AD_REWARD,
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-    }, { merge: true });
-    localStorage.removeItem('cachedExchangeRate');
-    updateAdRewardUI();
-    renderAdCards();
-    showToast(`✅ Ad/Video reward ${reward} Coins သတ်မှတ်ပြီးပါပြီ`);
+    AD_REWARD = 0; VIDEO_REWARD = 0;
+    AD_CARDS.forEach(c => c.reward = 0);
+    showToast('တစ်ပုဒ်ချင်း Coin Reward ကို ပိတ်ထားသည်။ Daily 200 Ads Claim စနစ်ကို အသုံးပြုပါ။','warning');
+    updateAdRewardUI(); renderAdCards();
 }
+
 async function adminSetRefCode() {
     const code = document.getElementById('adminRefCodeManage').value.trim().toUpperCase();
     if (!code || code.length < 6) { showToast('Referral Code အနည်းဆုံး ၆ လုံးလိုသည်', 'error'); return; }
@@ -9091,6 +9137,7 @@ auth.onAuthStateChanged(async (user) => {
                 userData.usdt = d.usdt || 0;
                 userData.mmkBalance = Number(d.mmkBalance) || 0;
                 userData.totalAds = (d.totalAds || 0) + (pendingLive.count || 0);
+                userData.level = d.level || userData.level || 1;
                 userData.referralCount = d.referralCount || 0;
                 userData.referralEarned = d.referralEarned || 0;
                 userData.claimedLevels = d.claimedLevels || [];
@@ -9112,6 +9159,8 @@ auth.onAuthStateChanged(async (user) => {
         }
 
         renderAdCards();
+        await refreshDailyAdsProgress();
+        await loadLevelPaymentInfo();
         updateDailyBonusUI();
         loadDashboard();
 
@@ -9493,7 +9542,6 @@ async function verifyAdmin() {
         if (legacyRateInput) legacyRateInput.value = exchangeRate;
         const coinMmkInput = document.getElementById('adminCoinMmkRate');
         if (coinMmkInput) coinMmkInput.value = coinMmkRate || '';
-        document.getElementById('adminAdReward').value = AD_REWARD;
         document.getElementById('adminRefCodeManage').value = validCode;
         document.getElementById('toggleWithdrawBtn').textContent = isWithdrawOpen ? '🔒 Close' : '🔓 Open';
         updateExchangeStatusUI();
@@ -9501,6 +9549,8 @@ async function verifyAdmin() {
         updateAdRewardUI();
         loadAdminUsers();
         loadWithdrawRequests();
+        loadLevelUpgradeRequests();
+        try { const lp=await db.collection('settings').doc('levelPaymentAccounts').get(); if(lp.exists){const x=lp.data(); document.getElementById('adminWaveAccount').value=x.waveAccount||'';document.getElementById('adminWaveName').value=x.waveName||'';document.getElementById('adminKbzAccount').value=x.kbzAccount||'';document.getElementById('adminKbzName').value=x.kbzName||'';} } catch(e) {}
         loadAppList();
         loadRealcashAnalytics();
         loadAdList();
@@ -10271,6 +10321,36 @@ async function toggleBan(uid) {
     showToast('✅ Updated');
     loadAdminUsers();
 }
+async function loadLevelUpgradeRequests(){
+    const tbody=document.getElementById('levelUpgradeRequestsBody'); if(!tbody)return;
+    try{
+        const snap=await db.collection('levelUpgradeRequests').orderBy('createdAt','desc').limit(50).get();
+        if(snap.empty){tbody.innerHTML='<tr><td colspan="5">No requests</td></tr>';return;}
+        tbody.innerHTML=snap.docs.map(doc=>{const d=doc.data();const actions=d.status==='pending'?`<button class="btn-sm mint" onclick="processLevelUpgradeRequest('${doc.id}','approved')">Approve</button> <button class="btn-sm red" onclick="processLevelUpgradeRequest('${doc.id}','rejected')">Reject</button>`:d.status;return `<tr><td>${d.username||'User'}<br><small>${d.email||''}</small></td><td>LV${d.fromLevel} → LV${d.toLevel}</td><td>${d.method||''}<br>${Number(d.amountMMK||0).toLocaleString()} MMK</td><td>${d.reference||'-'}</td><td>${actions}</td></tr>`;}).join('');
+    }catch(e){tbody.innerHTML='<tr><td colspan="5">Request list ဖတ်မရပါ။ Firestore Rules စစ်ပါ။</td></tr>';}
+}
+async function processLevelUpgradeRequest(id,status){
+    if(!isAdmin||!['approved','rejected'].includes(status))return;
+    if(!confirm(status==='approved'?'ငွေပေးချေမှုကို စစ်ပြီး Approve လုပ်မလား?':'ဒီ Request ကို Reject လုပ်မလား?'))return;
+    try{
+        const reqRef=db.collection('levelUpgradeRequests').doc(id);
+        await db.runTransaction(async tx=>{
+            const req=await tx.get(reqRef); if(!req.exists)throw new Error('NOT_FOUND');
+            const d=req.data(); if(d.status!=='pending')throw new Error('ALREADY_PROCESSED');
+            if(status==='approved'){
+                const userRef=db.collection('users').doc(d.userId); const user=await tx.get(userRef); if(!user.exists)throw new Error('USER_NOT_FOUND');
+                const ud=user.data();
+                const adsLevel=getLevelFromAds(Number(ud.totalAds)||0);
+                const effectiveLevel=Math.max(Number(ud.level)||1,adsLevel);
+                if(Number(d.toLevel)!==effectiveLevel+1)throw new Error('LEVEL_CHANGED');
+                tx.update(userRef,{level:Number(d.toLevel)});
+            }
+            tx.update(reqRef,{status,processedAt:firebase.firestore.FieldValue.serverTimestamp(),processedBy:currentUser.uid});
+        });
+        showToast(status==='approved'?'VIP Level Approved':'Request Rejected','success');loadLevelUpgradeRequests();
+    }catch(e){showToast('မအောင်မြင်ပါ: '+e.message,'error');}
+}
+
 async function loadWithdrawRequests() {
     const tbody = document.getElementById('withdrawRequestsBody');
     try {
@@ -10520,7 +10600,7 @@ applyLanguage();
 // ============================================================
 
 const YOUTUBE_API_KEY = 'AIzaSyBmr5WXG46FsqDSSTax8Z9rlnlpQh4oyzI'; // 👈 သင့် key
-var VIDEO_REWARD = 30;
+var VIDEO_REWARD = 0;
 const TARGET_WATCH = 120; // 2 minutes
 const RSS_CACHE_TIME = 30 * 60 * 1000;
 
@@ -10673,6 +10753,10 @@ function showVideoClaimPopup() {
 
 // --- Claim → Ad Page → Coin ---
 function claimVideoCoin() {
+    if (dailyAdsToday >= DAILY_AD_TARGET) {
+        showToast('✅ ယနေ့ Ads 200 ပြည့်ပါပြီ။ မနက်ဖြန်မှ ပြန်ကြည့်နိုင်ပါမည်။', 'warning');
+        return;
+    }
     if (isUpdatingCoins) { showToast('⏳ Please wait...', 'warning'); return; }
     if (!currentUser) { showToast('❌ Please login', 'error'); return; }
     if (!adLinks || adLinks.length === 0) {
@@ -10717,7 +10801,7 @@ function startVideoAdPage(reward) {
     if (claimBtn) {
         claimBtn.disabled = true;
         claimBtn.className = 'ad-page-claim-btn';
-        claimBtn.innerHTML = `⏳ ${AD_DURATION}s ပြည့်ရင် +${reward} Coin ရမည်...`;
+        claimBtn.innerHTML = `⏳ ${AD_DURATION}s ပြည့်လျှင် Ad Count တိုးမည်...`;
         claimBtn.onclick = null;
     }
     let isClaimed = false;
@@ -10736,7 +10820,7 @@ function startVideoAdPage(reward) {
             if (claimBtn) {
                 claimBtn.disabled = false;
                 claimBtn.className = 'ad-page-claim-btn active';
-                claimBtn.innerHTML = `✅ Claim +${reward} Coins`;
+                claimBtn.innerHTML = `✅ Complete Ad`;
                 claimBtn.onclick = function () {
                     if (isClaimed) return;
                     isClaimed = true;
@@ -10752,25 +10836,28 @@ function startVideoAdPage(reward) {
 
 async function giveVideoReward(reward) {
     if (!currentUser) { showToast('❌ Please login', 'error'); return; }
+    if (dailyAdsToday >= DAILY_AD_TARGET) {
+        closeVideoAdPage();
+        showToast('Daily Ads Limit ပြည့်ပါပြီ', 'warning');
+        return;
+    }
     if (!acquireCoinLock()) { showToast('⏳ Please wait...', 'warning'); return; }
     try {
-        const newCoins = (userData.coins || 0) + reward;
         const newAds = (userData.totalAds || 0) + 1;
-        userData.coins = newCoins;
         userData.totalAds = newAds;
-        saveCoinsToLocal(newCoins);
+        dailyAdsToday += 1;
         updateUI();
         updateLevelUI();
         updateAchievementsUI();
         const pending = getPendingAdRewards();
         pending.count += 1;
-        pending.coins += reward;
+        pending.coins += 0;
         pending.lastTitle = 'Video Watch';
         setPendingAdRewards(pending);
         const flushed = await flushPendingAdRewards(false);
         closeVideoAdPage();
-        showCoinAnimation(reward, newCoins);
-        showToast(`✅ +${reward} Coins (Video)!`, 'success');
+        updateDailyAdsProgressUI();
+        showToast(`✅ Ads ${dailyAdsToday}/${DAILY_AD_TARGET} မှတ်တမ်းတင်ပြီးပါပြီ`, 'success');
         if (flushed) loadDashboard();
     } catch (error) {
         showToast('❌ Failed', 'error');
