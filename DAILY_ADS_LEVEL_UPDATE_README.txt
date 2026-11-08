@@ -4,16 +4,16 @@ CASHTUBE - DAILY ADS + VIP LEVEL UPDATE
 WHAT CHANGED
 ------------
 1. Per-ad 30 Coin reward is disabled for new ad views.
-2. Every completed ad adds one count to the daily 200 Ads target.
-3. The dashboard shows a 0/200 progress bar.
-4. Daily reward is claimable once per Yangon calendar day, after 200 Ads:
+2. Every completed ad adds one count to the daily 300 Ads target.
+3. The dashboard shows a 0/300 progress bar.
+4. Daily reward is claimable once per Yangon calendar day, after 300 Ads:
    LV1 = 6,000 coins
    LV2 = 8,000 coins
    LV3 = 10,000 coins
    LV4 = 12,000 coins
    LV5 = 14,000 coins
 5. Ads-based level thresholds (lifetime totalAds):
-   LV1 = 0, LV2 = 1,000, LV3 = 2,000, LV4 = 4,000, LV5 = 6,000.
+   LV1 = 5,000, LV2 = 10,000, LV3 = 15,000, LV4 = 20,000, LV5 = 25,000.
 6. A user can request the next level upgrade for 5,000 MMK using WavePay or KBZPay.
    The user enters the payment transaction/reference ID. Admin must verify payment
    independently and approve the request before the account's stored level changes.
