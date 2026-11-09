@@ -17,6 +17,19 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.active == true;
     }
 
+    function hasActiveAdAccess(uid) {
+      return exists(/databases/$(database)/documents/adAccess/$(uid))
+        && get(/databases/$(database)/documents/adAccess/$(uid)).data.active == true
+        && get(/databases/$(database)/documents/adAccess/$(uid)).data.expiresAt is timestamp
+        && request.time < get(/databases/$(database)/documents/adAccess/$(uid)).data.expiresAt;
+    }
+
+    match /adAccess/{uid} {
+      allow get: if isOwner(uid) || isAdmin();
+      allow list: if isAdmin();
+      allow create, update, delete: if isAdmin();
+    }
+
     match /admins/{uid} {
       allow get: if isOwner(uid) || isAdmin();
       allow list: if isAdmin();
@@ -47,7 +60,8 @@ service cloud.firestore {
       allow read: if isAdmin()
         || (signedIn() && id.matches('^' + request.auth.uid + '.*$'));
       allow create, update: if signedIn()
-        && id.matches('^' + request.auth.uid + '.*$');
+        && id.matches('^' + request.auth.uid + '.*$')
+        && hasActiveAdAccess(request.auth.uid);
       allow delete: if isAdmin();
     }
 
