@@ -72,6 +72,9 @@ service cloud.firestore {
           && request.resource.data.status == 'pending'
           && request.resource.data.fromLevel is number
           && request.resource.data.toLevel is number
+          && request.resource.data.fromLevel >= 1
+          && request.resource.data.fromLevel < 20
+          && request.resource.data.toLevel <= 20
           && request.resource.data.toLevel == request.resource.data.fromLevel + 1
           && request.resource.data.amountMMK == 5000
           && request.resource.data.paymentMethod in ['WavePay', 'KPay']
