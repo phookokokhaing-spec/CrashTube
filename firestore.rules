@@ -77,6 +77,29 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    match /freeLevelRequests/{uid} {
+      function validFreeLevelRequest() {
+        return request.resource.data.userId == request.auth.uid
+          && request.resource.data.status == 'pending'
+          && request.resource.data.fromLevel is number
+          && request.resource.data.toLevel is number
+          && request.resource.data.toLevel == request.resource.data.fromLevel + 1
+          && request.resource.data.keys().hasOnly([
+            'userId', 'username', 'email',
+            'fromLevel', 'toLevel', 'status', 'createdAt'
+          ]);
+      }
+
+      allow get: if isOwner(uid) || isAdmin();
+      allow list: if isAdmin();
+      allow create: if isOwner(uid) && validFreeLevelRequest();
+      allow update: if isAdmin()
+        || (isOwner(uid)
+          && resource.data.status == 'rejected'
+          && validFreeLevelRequest());
+      allow delete: if isAdmin();
+    }
+
     match /withdrawals/{id} {
       allow create: if signedIn()
         && request.resource.data.userId == request.auth.uid;
