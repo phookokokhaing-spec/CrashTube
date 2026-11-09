@@ -66,14 +66,32 @@ service cloud.firestore {
     }
 
     match /levelUpgradeRequests/{id} {
-      allow create: if signedIn()
-        && request.resource.data.userId == request.auth.uid
-        && request.resource.data.status == 'pending'
-        && request.resource.data.amountMMK == 5000
-        && request.resource.data.toLevel == request.resource.data.fromLevel + 1;
-      allow read: if isAdmin()
-        || (signedIn() && resource.data.userId == request.auth.uid);
-      allow update: if isAdmin();
+      function validPaidLevelRequest() {
+        return request.resource.data.userId == request.auth.uid
+          && id.matches('^' + request.auth.uid + '_LV[0-9]+$')
+          && request.resource.data.status == 'pending'
+          && request.resource.data.fromLevel is number
+          && request.resource.data.toLevel is number
+          && request.resource.data.toLevel == request.resource.data.fromLevel + 1
+          && request.resource.data.amountMMK == 5000
+          && request.resource.data.paymentMethod in ['WavePay', 'KPay']
+          && request.resource.data.reference is string
+          && request.resource.data.reference.matches('^[0-9]{5}$')
+          && request.resource.data.keys().hasOnly([
+            'userId', 'username', 'email', 'fromLevel', 'toLevel',
+            'amountMMK', 'paymentMethod', 'reference', 'status', 'createdAt'
+          ]);
+      }
+
+      allow get: if isAdmin()
+        || (signedIn() && id.matches('^' + request.auth.uid + '_LV[0-9]+$'));
+      allow list: if isAdmin();
+      allow create: if signedIn() && validPaidLevelRequest();
+      allow update: if isAdmin()
+        || (signedIn()
+          && resource.data.userId == request.auth.uid
+          && resource.data.status == 'rejected'
+          && validPaidLevelRequest());
       allow delete: if isAdmin();
     }
 

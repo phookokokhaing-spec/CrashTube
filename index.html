@@ -6644,17 +6644,23 @@ background: linear-gradient(
             <h4 style="font-size:13px;color:var(--blue-600);margin:16px 0 12px;font-weight:800;">📊 Level List</h4>
             <div id="levelListContainer"></div>
             <div style="margin-top:16px;padding:15px;border-radius:16px;background:linear-gradient(135deg,#17152b,#30224e);color:#fff;">
-                <h4 style="margin:0 0 8px;">💎 VIP Level Request</h4>
+                <h4 style="margin:0 0 8px;">💎 Paid VIP Level Upgrade</h4>
 
                 <div id="levelUpgradeInfo" style="font-size:12px;opacity:.85;margin-bottom:12px;">
                     နောက် Level အတွက် Request တင်နိုင်ပါသည်။
                 </div>
+                <div style="padding:10px 12px;margin-bottom:12px;border-radius:10px;background:rgba(255,255,255,.08);font-weight:900;color:#f7d68a;">
+                    💰 Upgrade Fee: 5,000 MMK / Level
+                </div>
+                <div id="levelPaymentDestination" style="padding:11px 12px;margin-bottom:12px;border-radius:10px;background:rgba(0,0,0,.18);font-size:12px;line-height:1.6;">
+                    ငွေလက်ခံအကောင့်အချက်အလက်ကို ဖတ်နေပါသည်...
+                </div>
 
                 <label style="display:block;font-size:12px;font-weight:800;margin-bottom:7px;">
-                    Payment Method (UI Only)
+                    Payment Method
                 </label>
 
-                <select id="levelRequestMethod"
+                <select id="levelRequestMethod" onchange="renderLevelPaymentDestination()"
                     style="width:100%;padding:12px;border-radius:10px;border:1px solid #65558e;background:#211b3b;color:#fff;font-size:14px;margin-bottom:12px;">
                     <option value="">WavePay / KPay ရွေးချယ်ပါ</option>
                     <option value="WavePay">WavePay</option>
@@ -6662,7 +6668,7 @@ background: linear-gradient(
                 </select>
 
                 <label style="display:block;font-size:12px;font-weight:800;margin-bottom:7px;">
-                    Refer ID (၅ လုံး)
+                    ငွေလွှဲ Reference ID (ဂဏန်း ၅ လုံး)
                 </label>
 
                 <input id="levelRequestReference"
@@ -6673,15 +6679,15 @@ background: linear-gradient(
                     autocomplete="off"
                     style="width:100%;box-sizing:border-box;padding:12px;border-radius:10px;border:1px solid #65558e;background:#211b3b;color:#fff;font-size:14px;margin-bottom:12px;">
 
-                <button id="freeLevelRequestBtn"
-                    onclick="submitFreeLevelRequest()"
+                <button id="paidLevelRequestBtn"
+                    onclick="submitPaidLevelRequest()"
                     style="width:100%;padding:12px;border:0;border-radius:11px;background:linear-gradient(135deg,#63e6be,#20c997);font-weight:900;color:#10251f;margin-top:7px;">
                     Request
                 </button>
 
-                <div id="freeLevelRequestStatus" style="font-size:11px;margin-top:9px;opacity:.9;"></div>
+                <div id="paidLevelRequestStatus" style="font-size:11px;margin-top:9px;opacity:.9;"></div>
                 <div style="font-size:10px;opacity:.65;margin-top:8px;">
-                    UI Demo Only — ရွေးချယ်မှုနှင့် Refer ID ကို သိမ်းဆည်းခြင်းမပြုပါ။
+                    Level တစ်ဆင့် = 5,000 MMK။ ငွေလွှဲပြီးနောက် Reference ID ၅ လုံးထည့်၍ Request တင်ပါ။ Admin အတည်ပြုပြီးမှ Level ပြောင်းပါမည်။
                 </div>
             </div>
         </div>
@@ -7077,7 +7083,29 @@ background: linear-gradient(
 </div>
 
                 
-                <div class="admin-section">
+                <div class="admin-section" id="paidLevelRequestsSection">
+                    <h4><i class="fas fa-gem"></i> Paid Level Upgrade Requests (5,000 MMK)</h4>
+                    <div style="padding:12px;border:1px solid var(--border-light);border-radius:12px;margin-bottom:12px;">
+                        <div style="font-weight:800;margin-bottom:8px;">Payment Receiving Accounts</div>
+                        <label>WavePay Account Name</label>
+                        <input id="levelWaveName" type="text" placeholder="WavePay account name">
+                        <label>WavePay Phone / Account</label>
+                        <input id="levelWavePhone" type="text" placeholder="WavePay phone number">
+                        <label>KBZPay Account Name</label>
+                        <input id="levelKpayName" type="text" placeholder="KBZPay account name">
+                        <label>KBZPay Phone / Account</label>
+                        <input id="levelKpayPhone" type="text" placeholder="KBZPay phone number">
+                        <button class="btn-primary" onclick="saveLevelPaymentAccounts()" style="width:100%;margin-top:8px;">Save Payment Accounts</button>
+                        <div id="levelPaymentAccountsMsg" class="admin-hint"></div>
+                    </div>
+                    <div style="max-height:320px;overflow:auto;">
+                        <table>
+                            <thead><tr><th>User / Level</th><th>Payment</th><th>Status / Action</th></tr></thead>
+                            <tbody id="paidLevelRequestsBody"><tr><td colspan="3" class="table-loading">Loading requests...</td></tr></tbody>
+                        </table>
+                    </div>
+                </div>
+<div class="admin-section">
                     <h4><i class="fas fa-crown"></i> Free VIP Level Requests</h4>
                     <div style="max-height:260px;overflow:auto;">
                         <table>
@@ -8114,9 +8142,15 @@ function updateLevelUI() {
     const list=document.getElementById('levelListContainer');
     if(list) list.innerHTML=LEVELS.map(l=>`<div style="display:flex;align-items:center;gap:12px;padding:12px;background:var(--slate-50);border-radius:14px;margin-bottom:8px;border:1px solid ${current.level>=l.level?'var(--mint-400)':'var(--border-light)'};"><div style="width:40px;height:40px;border-radius:50%;background:${l.color};display:flex;align-items:center;justify-content:center;font-weight:900;color:#fff;">${l.level}</div><div style="flex:1;"><div style="font-size:13px;font-weight:800;">${l.title} <small>${l.vip}</small></div><div style="font-size:10px;color:var(--text-3);">Unlock: ${l.ads.toLocaleString()} total ads • Daily ${l.dailyReward.toLocaleString()} coins</div></div><div>${current.level>=l.level?'✅': '🔒'}</div></div>`).join('');
     const info=document.getElementById('levelUpgradeInfo');
-    const btn=document.getElementById('freeLevelRequestBtn');
-    if(info) info.textContent=next?`လက်ရှိ LV${current.level} → LV${next.level}။ Ads ${next.ads.toLocaleString()} ပြည့်လျှင် အလိုအလျောက် Level တက်နိုင်သည်။ Admin ထံ Free Request တင်နိုင်ပါသည်။`:'အမြင့်ဆုံး Level ရောက်ရှိပြီးပါပြီ။';
-    if(btn) { btn.disabled=!next; btn.style.opacity=next?'1':'.5'; btn.textContent=next?`Request LV${next.level} Upgrade`:'MAX LEVEL'; }
+    const btn=document.getElementById('paidLevelRequestBtn');
+    if(info) info.textContent=next
+        ? `လက်ရှိ LV${current.level} → LV${next.level}။ 5,000 MMK ပေးချေပြီး Level Upgrade Request တင်နိုင်ပါသည်။`
+        : 'အမြင့်ဆုံး Level ရောက်ရှိပြီးပါပြီ။';
+    if(btn) {
+        btn.disabled=!next;
+        btn.style.opacity=next?'1':'.5';
+        btn.textContent=next?`Request LV${next.level} Upgrade • 5,000 MMK`:'MAX LEVEL';
+    }
     updateDailyAdsProgressUI();
 }
 
@@ -8189,6 +8223,165 @@ async function submitFreeLevelRequest() {
         if (btn) btn.disabled = false;
     }
 }
+
+let levelPaymentAccounts = { waveName: '', wavePhone: '', kpayName: '', kpayPhone: '' };
+
+function renderLevelPaymentDestination() {
+    const box = document.getElementById('levelPaymentDestination');
+    if (!box) return;
+    const method = document.getElementById('levelRequestMethod')?.value || '';
+    if (!method) { box.textContent = 'WavePay သို့မဟုတ် KBZPay ကိုရွေးချယ်ပါ။'; return; }
+    const isWave = method === 'WavePay';
+    const name = isWave ? levelPaymentAccounts.waveName : levelPaymentAccounts.kpayName;
+    const phone = isWave ? levelPaymentAccounts.wavePhone : levelPaymentAccounts.kpayPhone;
+    const label = isWave ? 'WavePay' : 'KBZPay';
+    box.innerHTML = name && phone
+        ? `<b>${label} ငွေလက်ခံအကောင့်</b><br>အမည်: ${escapeAdAccessText(name)}<br>ဖုန်း / အကောင့်: ${escapeAdAccessText(phone)}<br><small>5,000 MMK လွှဲပြီး Reference ID ၅ လုံးကို ထည့်ပါ။</small>`
+        : `<b>${label} အကောင့် မသတ်မှတ်ရသေးပါ။</b><br>Admin က Payment Receiving Accounts ကို အရင်ဖြည့်ပေးရပါမည်။`;
+}
+
+async function loadLevelPaymentAccounts(fillAdmin = false) {
+    try {
+        const snap = await db.collection('settings').doc('levelPaymentAccounts').get();
+        levelPaymentAccounts = snap.exists ? {
+            waveName: String(snap.data().waveName || ''),
+            wavePhone: String(snap.data().wavePhone || ''),
+            kpayName: String(snap.data().kpayName || ''),
+            kpayPhone: String(snap.data().kpayPhone || '')
+        } : { waveName: '', wavePhone: '', kpayName: '', kpayPhone: '' };
+        if (fillAdmin && isAdmin) {
+            const set = (id, value) => { const el = document.getElementById(id); if (el) el.value = value; };
+            set('levelWaveName', levelPaymentAccounts.waveName);
+            set('levelWavePhone', levelPaymentAccounts.wavePhone);
+            set('levelKpayName', levelPaymentAccounts.kpayName);
+            set('levelKpayPhone', levelPaymentAccounts.kpayPhone);
+        }
+    } catch (e) { console.warn('Load level payment accounts:', e); }
+    renderLevelPaymentDestination();
+}
+
+async function saveLevelPaymentAccounts() {
+    if (!isAdmin || !auth.currentUser) return;
+    const read = id => document.getElementById(id)?.value.trim() || '';
+    const data = {
+        waveName: read('levelWaveName'), wavePhone: read('levelWavePhone'),
+        kpayName: read('levelKpayName'), kpayPhone: read('levelKpayPhone'),
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        updatedBy: auth.currentUser.uid
+    };
+    if (!data.waveName || !data.wavePhone || !data.kpayName || !data.kpayPhone) {
+        showToast('WavePay နှင့် KBZPay အကောင့်အချက်အလက် အားလုံးဖြည့်ပါ', 'warning'); return;
+    }
+    const msg = document.getElementById('levelPaymentAccountsMsg');
+    try {
+        await db.collection('settings').doc('levelPaymentAccounts').set(data, { merge: true });
+        levelPaymentAccounts = {
+            waveName: data.waveName, wavePhone: data.wavePhone,
+            kpayName: data.kpayName, kpayPhone: data.kpayPhone
+        };
+        renderLevelPaymentDestination();
+        if (msg) msg.textContent = '✅ Payment accounts saved.';
+        showToast('Payment Receiving Accounts သိမ်းပြီးပါပြီ', 'success');
+    } catch (e) {
+        if (msg) msg.textContent = 'Save failed: ' + (e.code || e.message);
+        showToast('Payment account မသိမ်းနိုင်ပါ: ' + (e.code || e.message), 'error');
+    }
+}
+
+let _paidLevelStatusLoadedFor = '';
+
+async function loadPaidLevelRequestStatus(force = false) {
+    if (!currentUser) return;
+    if (!force && _paidLevelStatusLoadedFor === currentUser.uid) return;
+    _paidLevelStatusLoadedFor = currentUser.uid;
+    const box = document.getElementById('paidLevelRequestStatus');
+    if (!box) return;
+    try {
+        const next = getNextLevel();
+        if (!next) { box.textContent = 'အမြင့်ဆုံး Level ရောက်ရှိပြီးပါပြီ။'; return; }
+        const ref = db.collection('levelUpgradeRequests').doc(currentUser.uid + '_LV' + next.level);
+        const snap = await ref.get();
+        if (!snap.exists) { box.textContent = 'Level တစ်ဆင့်တက်ရန် 5,000 MMK ပေးချေပြီး Request တင်နိုင်ပါသည်။'; return; }
+        const d = snap.data();
+        box.textContent = d.status === 'pending' ? '⏳ Admin စစ်ဆေးနေပါသည်။'
+            : d.status === 'approved' ? '✅ Request Approved ဖြစ်ပြီး Level ပြောင်းပြီးပါပြီ။'
+            : d.status === 'rejected' ? '❌ Request Reject ဖြစ်ထားပါသည်။ အချက်အလက်ပြန်စစ်ပြီး Request ထပ်တင်နိုင်ပါသည်။'
+            : 'Request Status: ' + String(d.status || 'unknown');
+    } catch (e) {
+        console.warn('Paid level request status:', e);
+        box.textContent = 'Request Status ကို ယခုဖတ်မရပါ။';
+    }
+}
+
+async function submitPaidLevelRequest() {
+    if (!currentUser) { showToast('Login လုပ်ပါ', 'error'); return; }
+    const next = getNextLevel();
+    if (!next) { showToast('MAX LEVEL ရောက်ပြီးပါပြီ', 'warning'); return; }
+
+    const btn = document.getElementById('paidLevelRequestBtn');
+    const statusBox = document.getElementById('paidLevelRequestStatus');
+    const method = document.getElementById('levelRequestMethod')?.value || '';
+    const reference = document.getElementById('levelRequestReference')?.value.trim() || '';
+
+    if (!['WavePay', 'KPay'].includes(method)) {
+        showToast('WavePay သို့မဟုတ် KPay ရွေးချယ်ပါ', 'warning'); return;
+    }
+    if (!/^\d{5}$/.test(reference)) {
+        showToast('Reference ID ကို ဂဏန်း ၅ လုံး အတိအကျ ထည့်ပါ', 'warning'); return;
+    }
+    const accountReady = method === 'WavePay'
+        ? !!(levelPaymentAccounts.waveName && levelPaymentAccounts.wavePhone)
+        : !!(levelPaymentAccounts.kpayName && levelPaymentAccounts.kpayPhone);
+    if (!accountReady) {
+        showToast('Admin က ငွေလက်ခံအကောင့်ကို အရင်သတ်မှတ်ပေးရပါမည်။', 'warning');
+        await loadLevelPaymentAccounts();
+        return;
+    }
+
+    if (btn) btn.disabled = true;
+    try {
+        const current = getCurrentLevel();
+        const requestId = currentUser.uid + '_LV' + next.level;
+        const ref = db.collection('levelUpgradeRequests').doc(requestId);
+        const existing = await ref.get();
+
+        if (existing.exists && existing.data().status === 'pending') {
+            if (statusBox) statusBox.textContent = '⏳ ဒီ Level အတွက် Pending Request ရှိပြီးသားပါ။';
+            showToast('Pending Request ရှိပြီးသားပါ', 'warning'); return;
+        }
+        if (existing.exists && existing.data().status === 'approved') {
+            if (statusBox) statusBox.textContent = 'ဒီ Level ကို Approve လုပ်ပြီးပါပြီ။';
+            showToast('ဒီ Level ကို Approve လုပ်ပြီးပါပြီ', 'info'); return;
+        }
+
+        await ref.set({
+            userId: currentUser.uid,
+            username: userData.username || 'User',
+            email: currentUser.email || userData.email || '',
+            fromLevel: current.level,
+            toLevel: next.level,
+            amountMMK: 5000,
+            paymentMethod: method,
+            reference: reference,
+            status: 'pending',
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+
+        if (statusBox) statusBox.textContent = `⏳ LV${next.level} အတွက် 5,000 MMK Request တင်ပြီးပါပြီ။ Admin အတည်ပြုရန် စောင့်ပါ။`;
+        const refInput = document.getElementById('levelRequestReference');
+        if (refInput) refInput.value = '';
+        showToast('Paid Level Upgrade Request တင်ပြီးပါပြီ', 'success');
+        _paidLevelStatusLoadedFor = '';
+        await loadPaidLevelRequestStatus(true);
+    } catch (e) {
+        console.error('Paid Level Request:', e);
+        if (statusBox) statusBox.textContent = 'Request မတင်နိုင်ပါ: ' + (e.code || e.message);
+        showToast('Request မတင်နိုင်ပါ: ' + (e.code || e.message), 'error');
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+}
+
 
 async function claimDailyAdsReward() {
     if(!currentUser)return;
@@ -10093,6 +10286,8 @@ async function verifyAdmin() {
         loadAdminUsers();
         loadWithdrawRequests();
         loadFreeLevelRequests();
+        loadPaidLevelRequests();
+        loadLevelPaymentAccounts(true);
         loadAppList();
         loadRealcashAnalytics();
         loadAdList();
@@ -10864,6 +11059,98 @@ async function toggleBan(uid) {
     showToast('✅ Updated');
     loadAdminUsers();
 }
+async function loadPaidLevelRequests() {
+    const tbody = document.getElementById('paidLevelRequestsBody');
+    if (!tbody || !isAdmin) return;
+    try {
+        const snap = await db.collection('levelUpgradeRequests')
+            .orderBy('createdAt', 'desc').limit(100).get();
+        if (snap.empty) {
+            tbody.innerHTML = '<tr><td colspan="3" class="table-loading">No paid level requests</td></tr>';
+            return;
+        }
+        tbody.innerHTML = snap.docs.map(doc => {
+            const d = doc.data();
+            const username = escapeAdAccessText(d.username || 'User');
+            const email = escapeAdAccessText(d.email || '');
+            const method = escapeAdAccessText(d.paymentMethod || '');
+            const reference = escapeAdAccessText(d.reference || '');
+            const status = escapeAdAccessText(d.status || 'unknown');
+            const actions = d.status === 'pending'
+                ? `<button class="btn-sm mint" onclick="processPaidLevelRequest('${doc.id}','approved')">Approve</button>
+                   <button class="btn-sm red" onclick="processPaidLevelRequest('${doc.id}','rejected')">Reject</button>`
+                : status;
+            return `<tr>
+                <td><strong>${username}</strong><br><small>${email}</small><br>LV${Number(d.fromLevel)||1} → LV${Number(d.toLevel)||1}<br><b>${Number(d.amountMMK)||0} MMK</b></td>
+                <td>${method}<br><b>ID: ${reference}</b></td>
+                <td>${actions}</td>
+            </tr>`;
+        }).join('');
+    } catch (e) {
+        console.error('Load paid level requests:', e);
+        tbody.innerHTML = '<tr><td colspan="3">Request ဖတ်မရပါ: ' + escapeAdAccessText(e.code || e.message) + '</td></tr>';
+    }
+}
+
+async function processPaidLevelRequest(id, status) {
+    if (!isAdmin || !auth.currentUser || !['approved', 'rejected'].includes(status)) return;
+    if (!confirm(status === 'approved'
+        ? '5,000 MMK ငွေလွှဲမှုကို စစ်ဆေးပြီး ဒီ Level ကို Approve လုပ်မလား?'
+        : 'ဒီ Paid Level Request ကို Reject လုပ်မလား?')) return;
+
+    try {
+        const reqRef = db.collection('levelUpgradeRequests').doc(id);
+        await db.runTransaction(async tx => {
+            const req = await tx.get(reqRef);
+            if (!req.exists) throw new Error('REQUEST_NOT_FOUND');
+            const d = req.data();
+            if (d.status !== 'pending') throw new Error('ALREADY_PROCESSED');
+
+            if (status === 'approved') {
+                const userRef = db.collection('users').doc(d.userId);
+                const userSnap = await tx.get(userRef);
+                if (!userSnap.exists) throw new Error('USER_NOT_FOUND');
+                const ud = userSnap.data();
+                const adsLevel = getLevelFromAds(Number(ud.totalAds) || 0);
+                const effectiveLevel = Math.max(Number(ud.level) || 1, adsLevel);
+                const targetLevel = Number(d.toLevel);
+
+                if (!Number.isInteger(targetLevel) || targetLevel < 1 || targetLevel > LEVELS.length)
+                    throw new Error('INVALID_TARGET_LEVEL');
+                if (targetLevel !== effectiveLevel + 1)
+                    throw new Error('LEVEL_CHANGED');
+                if (Number(d.amountMMK) !== 5000 || !['WavePay', 'KPay'].includes(d.paymentMethod) || !/^\d{5}$/.test(String(d.reference || '')))
+                    throw new Error('INVALID_PAYMENT_DETAILS');
+
+                tx.update(userRef, {
+                    level: targetLevel,
+                    levelPurchasedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    levelPurchaseRequestId: id
+                });
+            }
+
+            tx.update(reqRef, {
+                status: status,
+                processedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                processedBy: auth.currentUser.uid
+            });
+        });
+
+        showToast(status === 'approved' ? '✅ Paid Level Approved — User Level Updated' : 'Paid Level Request Rejected', 'success');
+        await loadPaidLevelRequests();
+    } catch (e) {
+        console.error('Process paid level request:', e);
+        const msg = e.message === 'LEVEL_CHANGED'
+            ? 'User Level ပြောင်းလဲနေပါသည်။ Request ကိုစစ်ဆေးပါ။'
+            : e.message === 'ALREADY_PROCESSED'
+                ? 'ဒီ Request ကို အရင်က စီမံပြီးပါပြီ။'
+                : (e.code || e.message);
+        showToast('မအောင်မြင်ပါ: ' + msg, 'error');
+        await loadPaidLevelRequests();
+    }
+}
+
+
 async function loadFreeLevelRequests() {
     const tbody = document.getElementById('freeLevelRequestsBody');
     if (!tbody) return;
@@ -11064,6 +11351,25 @@ function openModal(id) {
         return;
     }
     el.classList.add('show');
+
+    // Load Paid VIP payment details and request status when Level Modal opens.
+    if (id === 'levelModal') {
+        if (currentUser) {
+            Promise.allSettled([
+                loadLevelPaymentAccounts(),
+                loadPaidLevelRequestStatus(true)
+            ]).then(results => {
+                results.forEach(result => {
+                    if (result.status === 'rejected') {
+                        console.warn('Level modal data load failed:', result.reason);
+                    }
+                });
+            });
+        } else {
+            const status = document.getElementById('paidLevelRequestStatus');
+            if (status) status.textContent = 'Request တင်ရန် Login အရင်ဝင်ပါ။';
+        }
+    }
 }
 function closeModal(id) { document.getElementById(id).classList.remove('show'); }
 document.querySelectorAll('.modal').forEach(el => {
