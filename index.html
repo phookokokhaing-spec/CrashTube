@@ -7258,29 +7258,79 @@ function loadAdAccessRequest(uid) {
         });
 }
 
+
 function getAdAccessRequestPanelHtml() {
     const req = adAccessRequestData || {};
+
     if (req.status === 'pending') {
         return '<div style="margin-top:16px;padding:12px;border-radius:12px;background:rgba(245,158,11,.12);color:#f59e0b;font-weight:800;">⏳ Access Request Pending — Admin အတည်ပြုချက်ကို စောင့်ဆိုင်းနေပါသည်။</div>';
     }
+
+    let notice = '';
+
     if (req.status === 'rejected') {
-        return '<div style="margin-top:12px;color:#ef7777;font-size:12px;">❌ Request ကို Admin မှ Reject လုပ်ထားပါသည်။ ပြန်လည် Request တင်နိုင်ပါသည်။</div><button onclick="requestAdAccess()" style="margin-top:12px;padding:12px 20px;border:0;border-radius:12px;background:#16a085;color:white;font-weight:800;">📩 Request Ads Access</button>';
+        notice = '<div style="margin-top:12px;color:#ef7777;font-size:12px;">❌ Request ကို Admin မှ Reject လုပ်ထားပါသည်။ ပြန်လည် Request တင်နိုင်ပါသည်။</div>';
     }
+
     if (req.status === 'approved' && req.expiresAt) {
         let expiry = 0;
         if (typeof req.expiresAt.toMillis === 'function') expiry = req.expiresAt.toMillis();
         else if (typeof req.expiresAt.toDate === 'function') expiry = req.expiresAt.toDate().getTime();
-        if (expiry > 0 && expiry <= Date.now()) {
-            return '<div style="margin-top:12px;color:#f59e0b;font-size:12px;">⌛ ယခင် Access သက်တမ်းကုန်ဆုံးပါပြီ။</div><button onclick="requestAdAccess()" style="margin-top:12px;padding:12px 20px;border:0;border-radius:12px;background:#16a085;color:white;font-weight:800;">📩 Request Again</button>';
+
+        if (expiry > 0 && expiry > Date.now()) {
+            return '<div style="margin-top:12px;color:#16a085;font-size:12px;">✅ Ads Access ရရှိထားပါသည်။</div>';
         }
+
+        notice = '<div style="margin-top:12px;color:#f59e0b;font-size:12px;">⌛ ယခင် Access သက်တမ်းကုန်ဆုံးပါပြီ။</div>';
     }
-    return '<button onclick="requestAdAccess()" style="margin-top:16px;padding:12px 20px;border:0;border-radius:12px;background:#16a085;color:white;font-weight:800;">📩 Request Ads Access</button>';
+
+    return `
+        ${notice}
+        <div style="margin-top:16px;padding:14px;border-radius:14px;background:rgba(255,255,255,.06);text-align:left;">
+            <label style="display:block;font-size:13px;font-weight:800;margin-bottom:8px;">
+                💳 Payment Method
+            </label>
+            <select id="adAccessMethod"
+                style="width:100%;padding:12px;border-radius:10px;border:1px solid rgba(255,255,255,.2);background:#202638;color:white;font-size:14px;">
+                <option value="WavePay">WavePay</option>
+                <option value="KBZPay">KBZPay</option>
+            </select>
+
+            <label style="display:block;font-size:13px;font-weight:800;margin:14px 0 8px;">
+                🆔 Request Reference ID (၅ လုံး)
+            </label>
+            <input id="adAccessReferenceId"
+                type="text"
+                maxlength="5"
+                minlength="5"
+                placeholder="ဥပမာ - A12B3"
+                autocomplete="off"
+                style="width:100%;box-sizing:border-box;padding:12px;border-radius:10px;border:1px solid rgba(255,255,255,.2);background:#202638;color:white;font-size:15px;text-align:center;letter-spacing:3px;text-transform:uppercase;">
+            <button onclick="requestAdAccess()"
+                style="display:block;width:100%;margin-top:14px;padding:13px 16px;border:0;border-radius:12px;background:#16a085;color:white;font-weight:800;font-size:14px;cursor:pointer;">
+                📩 Request Ads Access
+            </button>
+        </div>`;
 }
+
 
 async function requestAdAccess() {
     if (!currentUser) {
         showToast('Login ဝင်ပြီးမှ Request တင်နိုင်ပါမည်။', 'error');
         return;
+    }
+
+    const methodInput = document.getElementById('adAccessMethod');
+    const referenceInput = document.getElementById('adAccessReferenceId');
+
+    if (methodInput && referenceInput) {
+        const referenceId = referenceInput.value.trim().toUpperCase();
+
+        if (!/^[A-Z0-9]{5}$/.test(referenceId)) {
+            showToast('Reference ID ကို အက္ခရာ/ဂဏန်း ၅ လုံး အတိအကျ ထည့်ပါ။', 'error');
+            referenceInput.focus();
+            return;
+        }
     }
     if (hasActiveAdAccess()) {
         showToast('Ads Access ရရှိထားပြီးပါပြီ။', 'warning');
