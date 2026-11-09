@@ -6645,9 +6645,44 @@ background: linear-gradient(
             <div id="levelListContainer"></div>
             <div style="margin-top:16px;padding:15px;border-radius:16px;background:linear-gradient(135deg,#17152b,#30224e);color:#fff;">
                 <h4 style="margin:0 0 8px;">💎 VIP Level Request</h4>
-                <div id="levelUpgradeInfo" style="font-size:12px;opacity:.85;margin-bottom:10px;">နောက် Level အတွက် Admin ထံ Request တင်နိုင်ပါသည်။</div>
-                <button id="freeLevelRequestBtn" onclick="submitFreeLevelRequest()" style="width:100%;padding:12px;border:0;border-radius:11px;background:linear-gradient(135deg,#63e6be,#20c997);font-weight:900;color:#10251f;margin-top:7px;">Request Upgrade</button>
+
+                <div id="levelUpgradeInfo" style="font-size:12px;opacity:.85;margin-bottom:12px;">
+                    နောက် Level အတွက် Request တင်နိုင်ပါသည်။
+                </div>
+
+                <label style="display:block;font-size:12px;font-weight:800;margin-bottom:7px;">
+                    Payment Method (UI Only)
+                </label>
+
+                <select id="levelRequestMethod"
+                    style="width:100%;padding:12px;border-radius:10px;border:1px solid #65558e;background:#211b3b;color:#fff;font-size:14px;margin-bottom:12px;">
+                    <option value="">WavePay / KPay ရွေးချယ်ပါ</option>
+                    <option value="WavePay">WavePay</option>
+                    <option value="KPay">KBZPay</option>
+                </select>
+
+                <label style="display:block;font-size:12px;font-weight:800;margin-bottom:7px;">
+                    Refer ID (၅ လုံး)
+                </label>
+
+                <input id="levelRequestReference"
+                    type="text"
+                    inputmode="numeric"
+                    maxlength="5"
+                    placeholder="Refer ID ၅ လုံးထည့်ပါ"
+                    autocomplete="off"
+                    style="width:100%;box-sizing:border-box;padding:12px;border-radius:10px;border:1px solid #65558e;background:#211b3b;color:#fff;font-size:14px;margin-bottom:12px;">
+
+                <button id="freeLevelRequestBtn"
+                    onclick="submitFreeLevelRequest()"
+                    style="width:100%;padding:12px;border:0;border-radius:11px;background:linear-gradient(135deg,#63e6be,#20c997);font-weight:900;color:#10251f;margin-top:7px;">
+                    Request
+                </button>
+
                 <div id="freeLevelRequestStatus" style="font-size:11px;margin-top:9px;opacity:.9;"></div>
+                <div style="font-size:10px;opacity:.65;margin-top:8px;">
+                    UI Demo Only — ရွေးချယ်မှုနှင့် Refer ID ကို သိမ်းဆည်းခြင်းမပြုပါ။
+                </div>
             </div>
         </div>
     </div>
@@ -8099,6 +8134,19 @@ async function submitFreeLevelRequest() {
 
     const btn = document.getElementById('freeLevelRequestBtn');
     const statusBox = document.getElementById('freeLevelRequestStatus');
+
+    const method = document.getElementById('levelRequestMethod')?.value || '';
+    const reference = document.getElementById('levelRequestReference')?.value.trim() || '';
+
+    if (!['WavePay', 'KPay'].includes(method)) {
+        showToast('WavePay သို့မဟုတ် KPay ရွေးချယ်ပါ', 'warning');
+        return;
+    }
+
+    if (!/^\\d{5}$/.test(reference)) {
+        showToast('Refer ID ကို ဂဏန်း ၅ လုံး အတိအကျ ထည့်ပါ', 'warning');
+        return;
+    }
 
     if (btn) btn.disabled = true;
 
