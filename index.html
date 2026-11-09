@@ -10876,12 +10876,21 @@ async function processFreeLevelRequest(id, status) {
                 const ud = user.data();
                 const adsLevel = getLevelFromAds(Number(ud.totalAds) || 0);
                 const effectiveLevel = Math.max(Number(ud.level) || 1, adsLevel);
+                const targetLevel = Number(d.toLevel);
 
-                if (Number(d.toLevel) !== effectiveLevel + 1) {
+                if (!Number.isInteger(targetLevel) || targetLevel < 1 || targetLevel > LEVELS.length) {
+                    throw new Error('INVALID_TARGET_LEVEL');
+                }
+
+                if (targetLevel > effectiveLevel + 1) {
                     throw new Error('LEVEL_CHANGED');
                 }
 
-                tx.update(userRef, { level: Number(d.toLevel) });
+                // User က target Level ကို ရောက်ပြီးသားဆိုရင်
+                // Level ကို ထပ်မပြောင်းဘဲ Request ကို Approved လုပ်မည်။
+                if (targetLevel > effectiveLevel) {
+                    tx.update(userRef, { level: targetLevel });
+                }
             }
 
             tx.update(reqRef, {
