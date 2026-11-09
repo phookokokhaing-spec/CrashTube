@@ -6992,28 +6992,24 @@ background: linear-gradient(
                 </div>
                 
                 <div class="admin-section" id="adminAdAccessSection">
-                    <h4>🔐 Ads Free Test Access</h4>
+                    <h4>🔐 Ads Access Requests</h4>
                     <div class="admin-hint">
-                        User Email ဖြင့် Free Ads Access 15 ရက် ပေးနိုင်သည်။
-                        သက်တမ်းကုန်လျှင် Ads အလိုအလျောက် Lock ဖြစ်မည်။
+                        User Request များကို စစ်ဆေးပြီး Approve / Reject လုပ်နိုင်ပါသည်။
+                        Approve လုပ်သည့်အချိန်မှ 15 ရက် စတင်ပါမည်။
                     </div>
+                    <div id="adminAdAccessRequestsList" style="max-height:360px;overflow-y:auto;margin:10px 0;">
+                        <div style="padding:10px;">Pending Request များကို Load လုပ်နေပါသည်...</div>
+                    </div>
+                    <hr style="opacity:.2;margin:12px 0;">
+                    <div style="font-weight:800;font-size:13px;">Manual Revoke</div>
                     <input type="email" id="adminAdAccessEmail"
                         placeholder="User Email"
                         style="width:100%;margin:8px 0;">
-                    <div class="admin-row">
-                        <button class="btn-sm mint"
-                            onclick="adminGrantAdAccess()" style="flex:1;">
-                            🎁 Grant Free 15 Days
-                        </button>
-                        <button class="btn-sm red"
-                            onclick="adminRevokeAdAccess()" style="flex:1;">
-                            🔒 Revoke
-                        </button>
-                    </div>
-                    <div id="adminAdAccessMsg"
-                        style="font-size:12px;margin-top:8px;"></div>
+                    <button class="btn-sm red" onclick="adminRevokeAdAccess()" style="width:100%;">
+                        🔒 Revoke Ads Access
+                    </button>
+                    <div id="adminAdAccessMsg" style="font-size:12px;margin-top:8px;"></div>
                 </div>
-
                 <div class="admin-section">
                     <h4><i class="fas fa-coins"></i> Manage Coins</h4>
                     <div class="admin-row">
@@ -7226,6 +7222,11 @@ function clearAdAccessState() {
         adAccessUnsubscribe();
         adAccessUnsubscribe = null;
     }
+    if (adAccessRequestUnsubscribe) {
+        adAccessRequestUnsubscribe();
+        adAccessRequestUnsubscribe = null;
+    }
+    adAccessRequestData = null;
 
     if (adAccessCountdownTimer) {
         clearInterval(adAccessCountdownTimer);
@@ -7239,8 +7240,194 @@ function clearAdAccessState() {
     if (isAdPlaying) closeAdPageAndReturn();
 }
 
+
+function loadAdAccessRequest(uid) {
+    if (adAccessRequestUnsubscribe) {
+        adAccessRequestUnsubscribe();
+        adAccessRequestUnsubscribe = null;
+    }
+    adAccessRequestData = null;
+
+    adAccessRequestUnsubscribe = db.collection('adAccessRequests').doc(uid)
+        .onSnapshot(doc => {
+            if (!currentUser || currentUser.uid !== uid) return;
+            adAccessRequestData = doc.exists ? doc.data() : null;
+            renderAdCards();
+        }, error => {
+            console.error('AD ACCESS REQUEST LOAD FAILED:', error);
+        });
+}
+
+function getAdAccessRequestPanelHtml() {
+    const req = adAccessRequestData || {};
+    if (req.status === 'pending') {
+        return '<div style="margin-top:16px;padding:12px;border-radius:12px;background:rgba(245,158,11,.12);color:#f59e0b;font-weight:800;">⏳ Access Request Pending — Admin အတည်ပြုချက်ကို စောင့်ဆိုင်းနေပါသည်။</div>';
+    }
+    if (req.status === 'rejected') {
+        return '<div style="margin-top:12px;color:#ef7777;font-size:12px;">❌ Request ကို Admin မှ Reject လုပ်ထားပါသည်။ ပြန်လည် Request တင်နိုင်ပါသည်။</div><button onclick="requestAdAccess()" style="margin-top:12px;padding:12px 20px;border:0;border-radius:12px;background:#16a085;color:white;font-weight:800;">📩 Request Ads Access</button>';
+    }
+    if (req.status === 'approved' && req.expiresAt) {
+        let expiry = 0;
+        if (typeof req.expiresAt.toMillis === 'function') expiry = req.expiresAt.toMillis();
+        else if (typeof req.expiresAt.toDate === 'function') expiry = req.expiresAt.toDate().getTime();
+        if (expiry > 0 && expiry <= Date.now()) {
+            return '<div style="margin-top:12px;color:#f59e0b;font-size:12px;">⌛ ယခင် Access သက်တမ်းကုန်ဆုံးပါပြီ။</div><button onclick="requestAdAccess()" style="margin-top:12px;padding:12px 20px;border:0;border-radius:12px;background:#16a085;color:white;font-weight:800;">📩 Request Again</button>';
+        }
+    }
+    return '<button onclick="requestAdAccess()" style="margin-top:16px;padding:12px 20px;border:0;border-radius:12px;background:#16a085;color:white;font-weight:800;">📩 Request Ads Access</button>';
+}
+
+async function requestAdAccess() {
+    if (!currentUser) {
+        showToast('Login ဝင်ပြီးမှ Request တင်နိုင်ပါမည်။', 'error');
+        return;
+    }
+    if (hasActiveAdAccess()) {
+        showToast('Ads Access ရရှိထားပြီးပါပြီ။', 'warning');
+        return;
+    }
+    if (adAccessRequestData && adAccessRequestData.status === 'pending') {
+        showToast('Request ကို စစ်ဆေးနေဆဲဖြစ်ပါသည်။', 'warning');
+        return;
+    }
+
+    try {
+        const userRef = db.collection('users').doc(currentUser.uid);
+        const userSnap = await userRef.get();
+        const profile = userSnap.exists ? userSnap.data() : {};
+
+        await db.collection('adAccessRequests').doc(currentUser.uid).set({
+            userId: currentUser.uid,
+            email: currentUser.email || profile.email || '',
+            username: profile.username || profile.name || currentUser.displayName || 'User',
+            status: 'pending',
+            requestedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+
+        showToast('✅ Ads Access Request တင်ပြီးပါပြီ။', 'success');
+    } catch (e) {
+        console.error('AD ACCESS REQUEST FAILED:', e);
+        showToast('❌ Request မတင်နိုင်ပါ: ' + (e.message || e.code), 'error');
+    }
+}
+
+function escapeAdAccessText(value) {
+    return String(value || '').replace(/[&<>"']/g, ch => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;',
+        '"': '&quot;', "'": '&#39;'
+    })[ch]);
+}
+
+async function loadAdminAdAccessRequests() {
+    const box = document.getElementById('adminAdAccessRequestsList');
+    if (!box || !isAdmin) return;
+
+    box.innerHTML = '<div style="padding:10px;">Loading requests...</div>';
+
+    try {
+        const snap = await db.collection('adAccessRequests')
+            .where('status', '==', 'pending')
+            .get();
+
+        if (snap.empty) {
+            box.innerHTML = '<div style="padding:12px;font-size:12px;opacity:.7;">Pending Request မရှိသေးပါ။</div>';
+            return;
+        }
+
+        const rows = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        rows.sort((a, b) => {
+            const at = a.requestedAt && a.requestedAt.toMillis ? a.requestedAt.toMillis() : 0;
+            const bt = b.requestedAt && b.requestedAt.toMillis ? b.requestedAt.toMillis() : 0;
+            return at - bt;
+        });
+
+        box.innerHTML = rows.map(item => `
+            <div style="padding:12px;margin:8px 0;border:1px solid rgba(255,255,255,.14);border-radius:12px;">
+                <div style="font-weight:800;">${escapeAdAccessText(item.username || 'User')}</div>
+                <div style="font-size:12px;opacity:.8;margin:4px 0 10px;">${escapeAdAccessText(item.email)}</div>
+                <div style="display:flex;gap:8px;">
+                    <button class="btn-sm mint" onclick="adminApproveAdAccessRequest('${item.id}')" style="flex:1;">✅ Approve 15 Days</button>
+                    <button class="btn-sm red" onclick="adminRejectAdAccessRequest('${item.id}')" style="flex:1;">❌ Reject</button>
+                </div>
+            </div>
+        `).join('');
+    } catch (e) {
+        console.error('LOAD ACCESS REQUESTS FAILED:', e);
+        box.innerHTML = '<div style="color:#ef7777;padding:10px;">Request list load failed: ' + escapeAdAccessText(e.message) + '</div>';
+    }
+}
+
+async function adminApproveAdAccessRequest(uid) {
+    if (!isAdmin || !auth.currentUser) return;
+    try {
+        const requestRef = db.collection('adAccessRequests').doc(uid);
+        const requestSnap = await requestRef.get();
+        if (!requestSnap.exists || requestSnap.data().status !== 'pending') {
+            showToast('Request မရှိတော့ပါ။', 'warning');
+            await loadAdminAdAccessRequests();
+            return;
+        }
+
+        const request = requestSnap.data();
+        const expiresAt = firebase.firestore.Timestamp.fromDate(
+            new Date(Date.now() + 15 * 24 * 60 * 60 * 1000)
+        );
+
+        const batch = db.batch();
+        batch.set(db.collection('adAccess').doc(uid), {
+            active: true,
+            status: 'active',
+            email: request.email || '',
+            grantedAt: firebase.firestore.FieldValue.serverTimestamp(),
+            expiresAt: expiresAt,
+            grantedBy: auth.currentUser.uid,
+            durationDays: 15
+        });
+
+        batch.update(requestRef, {
+            status: 'approved',
+            approvedAt: firebase.firestore.FieldValue.serverTimestamp(),
+            approvedBy: auth.currentUser.uid,
+            expiresAt: expiresAt
+        });
+
+        await batch.commit();
+        showToast('✅ Ads Access 15 ရက် Approve လုပ်ပြီးပါပြီ။', 'success');
+        await loadAdminAdAccessRequests();
+    } catch (e) {
+        console.error('APPROVE ACCESS REQUEST FAILED:', e);
+        showToast('❌ Approve မအောင်မြင်ပါ: ' + (e.message || e.code), 'error');
+    }
+}
+
+async function adminRejectAdAccessRequest(uid) {
+    if (!isAdmin || !auth.currentUser) return;
+    try {
+        const ref = db.collection('adAccessRequests').doc(uid);
+        const snap = await ref.get();
+        if (!snap.exists || snap.data().status !== 'pending') {
+            showToast('Request မရှိတော့ပါ။', 'warning');
+            await loadAdminAdAccessRequests();
+            return;
+        }
+
+        await ref.update({
+            status: 'rejected',
+            rejectedAt: firebase.firestore.FieldValue.serverTimestamp(),
+            rejectedBy: auth.currentUser.uid
+        });
+
+        showToast('Request ကို Reject လုပ်ပြီးပါပြီ။', 'success');
+        await loadAdminAdAccessRequests();
+    } catch (e) {
+        console.error('REJECT ACCESS REQUEST FAILED:', e);
+        showToast('❌ Reject မအောင်မြင်ပါ: ' + (e.message || e.code), 'error');
+    }
+}
+
 async function loadAdAccess(uid) {
     clearAdAccessState();
+    loadAdAccessRequest(uid);
     renderAdCards();
 
     return await new Promise(resolve => {
@@ -7308,54 +7495,6 @@ async function findAdAccessUserByEmail(email) {
 
     if (snap.empty) throw new Error('USER_NOT_FOUND');
     return snap.docs[0];
-}
-
-async function adminGrantAdAccess() {
-    if (!isAdmin || !auth.currentUser) {
-        showToast('❌ Admin permission required', 'error');
-        return;
-    }
-
-    const input = document.getElementById('adminAdAccessEmail');
-    const msg = document.getElementById('adminAdAccessMsg');
-    const email = input ? input.value.trim() : '';
-
-    if (!email) {
-        if (msg) msg.textContent = 'User Email ထည့်ပါ။';
-        return;
-    }
-
-    try {
-        if (msg) msg.textContent = 'စစ်ဆေးနေပါသည်...';
-
-        const target = await findAdAccessUserByEmail(email);
-        const expiresAt = firebase.firestore.Timestamp.fromDate(
-            new Date(Date.now() + 15 * 24 * 60 * 60 * 1000)
-        );
-
-        await db.collection('adAccess').doc(target.id).set({
-            active: true,
-            status: 'active',
-            email: email,
-            grantedAt: firebase.firestore.FieldValue.serverTimestamp(),
-            expiresAt: expiresAt,
-            grantedBy: auth.currentUser.uid,
-            durationDays: 15
-        });
-
-        if (msg) msg.textContent = '✅ Free Ads Access 15 ရက် ပေးပြီးပါပြီ။';
-        showToast('✅ Free 15 Days Access Granted', 'success');
-    } catch (e) {
-        console.error('GRANT ACCESS FAILED:', e);
-        const message = e.code === 'permission-denied'
-            ? 'Firestore Permission မရပါ။ Admin UID နှင့် Rules ကိုစစ်ပါ။'
-            : e.message === 'USER_NOT_FOUND'
-                ? 'ဒီ Email နဲ့ User မတွေ့ပါ။'
-                : (e.message || 'Access ပေးမရပါ။');
-
-        if (msg) msg.textContent = '❌ ' + message;
-        showToast('❌ ' + message, 'error');
-    }
 }
 
 async function adminRevokeAdAccess() {
@@ -7749,6 +7888,8 @@ let isAdPlaying = false;
 let adAccessData = null;
 let adAccessLoaded = false;
 let adAccessUnsubscribe = null;
+let adAccessRequestData = null;
+let adAccessRequestUnsubscribe = null;
 let adAccessCountdownTimer = null;
 let adAccessWasActive = false;
 let adCardTimers = {};
@@ -8291,12 +8432,11 @@ function renderAdCards() {
         container.innerHTML = `
             <div style="width:100%;padding:24px 16px;text-align:center;">
                 <div style="font-size:38px;">🔒</div>
-                <div style="font-size:17px;font-weight:800;margin:10px 0;">
-                    Ads Access Locked
-                </div>
+                <div style="font-size:17px;font-weight:800;margin:10px 0;">Ads Access Locked</div>
                 <div style="font-size:13px;opacity:.8;">
-                    Admin မှ Free Ads Test Access 15 ရက် ရရှိပြီးမှ Ads ကြည့်နိုင်ပါမည်။
+                    Admin အတည်ပြုပြီးမှ Free Ads Access 15 ရက် ရရှိပါမည်။
                 </div>
+                ${getAdAccessRequestPanelHtml()}
             </div>`;
         return;
     }
@@ -9846,7 +9986,8 @@ async function verifyAdmin() {
         loadRealcashAnalytics();
         loadAdList();
         loadDailyTop3Rewards();
-        showToast('✅ Admin in');
+        loadAdminAdAccessRequests();
+                                showToast('✅ Admin in');
         closeModal('adminModal');
     } else {
         showToast('❌ Admin ID / Referral Code မမှန်ပါ', 'error');
