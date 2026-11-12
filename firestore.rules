@@ -275,6 +275,27 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // WEB PUSH TOKENS - each user can manage only their own browser token
+    match /users/{uid}/fcmTokens/{tokenId} {
+      allow get, list: if isOwner(uid);
+
+      allow create, update: if isOwner(uid)
+        && request.resource.data.keys().hasAll([
+          'token', 'platform', 'createdAt', 'updatedAt'
+        ])
+        && request.resource.data.keys().hasOnly([
+          'token', 'platform', 'createdAt', 'updatedAt'
+        ])
+        && request.resource.data.token is string
+        && request.resource.data.token.size() > 0
+        && request.resource.data.token.size() <= 4096
+        && request.resource.data.platform == 'web'
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.updatedAt is timestamp;
+
+      allow delete: if isOwner(uid);
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

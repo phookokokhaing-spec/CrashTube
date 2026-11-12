@@ -22,6 +22,7 @@
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-messaging.js"></script>
    
     <style>
 * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -6789,6 +6790,16 @@ background: linear-gradient(
         <div class="modal-content">
             <button class="modal-close" onclick="closeModal('notificationModal')">&times;</button>
             <h3><i class="fas fa-bell"></i> Notifications</h3>
+            <div style="padding:12px 0 16px;">
+                <button type="button" onclick="enablePushNotifications()"
+                    style="width:100%;padding:12px;border:0;border-radius:10px;background:#2563eb;color:white;font-weight:700;">
+                    <i class="fas fa-bell"></i> Enable Push Notifications
+                </button>
+                <div id="pushNotificationStatus"
+                    style="font-size:12px;text-align:center;margin-top:8px;color:var(--text-secondary,#888);">
+                    ဖုန်း Notification အသိပေးချက် ဖွင့်ရန် နှိပ်ပါ။
+                </div>
+            </div>
             <div id="notificationList" style="max-height:450px;overflow-y:auto;">
                 <div style="text-align:center;padding:25px;">Loading...</div>
             </div>
@@ -7144,7 +7155,7 @@ background: linear-gradient(
                 <div class="admin-section" id="adminNotificationSection">
                     <h4><i class="fas fa-bell"></i> Send User Notification</h4>
                     <div class="admin-hint" style="margin-bottom:10px;">
-                        Send a notification to one user only. Enter the user's Firebase UID.
+                        Enter a user's Firebase UID, or type ALL to notify every registered device.
                     </div>
                     <label>User UID</label>
                     <input id="adminNotificationUid" type="text"
@@ -11077,31 +11088,64 @@ async function sendAdminNotification() {
     status.textContent = 'Sending...';
 
     try {
-        await db.collection('notifications')
-            .doc(uid)
-            .collection('items')
-            .add({
-                title: title,
-                message: message,
-                read: false,
-                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-                createdBy: auth.currentUser.uid
-            });
+        if (uid.toUpperCase() === 'ALL') {
+            const idToken = await auth.currentUser.getIdToken(true);
 
-        status.textContent = 'Notification sent successfully.';
+            const response = await fetch(
+                'https://cashtube-push.zuzu168372.workers.dev/',
+                {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': 'Bearer ' + idToken,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        title: title,
+                        message: message
+                    })
+                }
+            );
+
+            const result = await response.json();
+
+            if (!response.ok || !result.success) {
+                throw new Error(result.error || 'Push notification failed');
+            }
+
+            status.textContent =
+                'Push sent: ' + result.sent +
+                ' / ' + result.total +
+                ' devices. Failed: ' + result.failed;
+
+            showToast('✅ Broadcast notification completed');
+        } else {
+            await db.collection('notifications')
+                .doc(uid)
+                .collection('items')
+                .add({
+                    title: title,
+                    message: message,
+                    read: false,
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    createdBy: auth.currentUser.uid
+                });
+
+            status.textContent = 'Notification saved successfully.';
+            showToast('Notification saved successfully');
+        }
+
         uidInput.value = '';
         titleInput.value = '';
         messageInput.value = '';
-        showToast('Notification sent successfully');
+
     } catch (error) {
         console.error('SEND NOTIFICATION ERROR:', error);
-        status.textContent = 'Failed to send: ' + (error.message || 'Permission denied');
+        status.textContent = 'Failed: ' + (error.message || 'Permission denied');
         showToast('Could not send notification', 'error');
     } finally {
         button.disabled = false;
     }
 }
-
 function adminLogout() {
     isAdmin = false;
     document.getElementById('adminLogin').style.display = 'block';
@@ -13850,6 +13894,93 @@ async function openLatestWithdrawalReceipt(){
     }
   });
 })();
+</script>
+
+
+<script>
+/* CASHTUBE WEB PUSH REGISTRATION */
+window.enablePushNotifications = async function () {
+    const status = document.getElementById('pushNotificationStatus');
+    const say = (message) => {
+        if (status) status.textContent = message;
+    };
+
+    try {
+        const user = firebase.auth().currentUser;
+        if (!user) {
+            say('အရင်ဆုံး CashTube အကောင့် Login ဝင်ပါ။');
+            return;
+        }
+
+        if (!('serviceWorker' in navigator) ||
+            !('Notification' in window) ||
+            !firebase.messaging) {
+            say('ဒီ Browser မှာ Push Notification မရနိုင်ပါ။');
+            return;
+        }
+
+        const supported = await firebase.messaging.isSupported();
+        if (!supported) {
+            say('ဒီ Browser သို့မဟုတ် ဖုန်းမှာ Push Notification မထောက်ပံ့ပါ။');
+            return;
+        }
+
+        if (Notification.permission === 'denied') {
+            say('Notification ပိတ်ထားပါတယ်။ Chrome Site Settings မှာ Allow ပြန်လုပ်ပါ။');
+            return;
+        }
+
+        let permission = Notification.permission;
+        if (permission !== 'granted') {
+            permission = await Notification.requestPermission();
+        }
+
+        if (permission !== 'granted') {
+            say('Notification ခွင့်ပြုချက် မရရှိပါ။');
+            return;
+        }
+
+        say('Notification စနစ် ချိတ်ဆက်နေပါတယ်...');
+
+        const registration = await navigator.serviceWorker.register(
+            '/firebase-messaging-sw.js',
+            { scope: '/' }
+        );
+
+        const messaging = firebase.messaging();
+        const token = await messaging.getToken({
+            vapidKey: 'BLnmW_udUd--yYnkWRegSuy3DxSN9xHwGYNcjQVcaAJj6Ssi9pMisJmAJR_52OAlMUXoFpsuJhKpZ9SrFIFXuOU',
+            serviceWorkerRegistration: registration
+        });
+
+        if (!token) {
+            say('FCM Token မရရှိပါ။ Browser ကို ပြန်ဖွင့်ပြီး စမ်းပါ။');
+            return;
+        }
+
+        const tokenId = encodeURIComponent(token);
+        const tokenRef = firebase.firestore()
+            .collection('users').doc(user.uid)
+            .collection('fcmTokens').doc(tokenId);
+
+        const existing = await tokenRef.get();
+
+        if (!existing.exists) {
+            await tokenRef.set({
+                token: token,
+                platform: 'web',
+                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+        }
+
+        localStorage.setItem('cashtube_push_enabled_' + user.uid, 'true');
+        say('✅ Push Notification ဖွင့်ပြီးပါပြီ။');
+    } catch (error) {
+        console.error('CASHTUBE PUSH ERROR:', error);
+        say('ချိတ်ဆက်မှု မအောင်မြင်ပါ။ ' + (error.message || 'ပြန်စမ်းပါ။'));
+    }
+};
 </script>
 
 </body>
