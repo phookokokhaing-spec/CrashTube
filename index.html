@@ -6897,12 +6897,10 @@ background: linear-gradient(
             <button class="modal-close" onclick="closeModal('adminModal')">&times;</button>
             <h3><i class="fas fa-shield-alt"></i> Admin Panel</h3>
             <div id="adminLogin">
-                <label>Admin ID</label>
-                <input type="password" id="adminIdInput" placeholder="Enter Admin ID" />
-                <label>Admin Referral Code</label>
-                <input type="password" id="adminRefCodeInput" placeholder="Admin Referral Code" />
-                <div class="admin-hint" id="adminRefCodeHint">ပထမဆုံး Admin ဝင်ရောက်ရာတွင် သီးသန့် Referral Code လိုအပ်ပါသည်။</div>
-                <button class="btn-primary" onclick="verifyAdmin()">Login</button>
+                <p style="font-size:13px;color:var(--text-2);margin-bottom:14px;">
+                    Firebase account ဖြင့် Admin Access ကို အတည်ပြုပါ။
+                </p>
+                <button class="btn-primary" onclick="verifyAdmin()">Verify Admin Access</button>
             </div>
             <div id="adminDashboard" style="display:none;">
                 <p style="color:var(--mint-600);font-weight:800;font-size:14px;margin-bottom:16px;">✅ Logged in</p>
@@ -11010,35 +11008,55 @@ async function loadRealcashAnalyticsFromFirestore() {
 }
 
 async function verifyAdmin() {
-    const id = document.getElementById('adminIdInput').value.trim();
-    console.log('REALCASH ADMIN ID:', id);
-    console.log('REALCASH FIREBASE UID:', auth.currentUser ? auth.currentUser.uid : 'NOT_SIGNED_IN');
-    if (auth.currentUser) {
-        console.log('👉 FIREBASE ADMIN UID =', auth.currentUser.uid);
-    } else {
-        console.warn('⚠️ Firebase Auth user မဝင်ထားသေးပါ');
+    const user = auth.currentUser;
+
+    if (!user) {
+        showToast('Firebase account အရင် Login ဝင်ပါ', 'error');
+        return;
     }
-    const enteredCode = document.getElementById('adminRefCodeInput').value.trim().toUpperCase();
-    const firstAdminLogin = localStorage.getItem('realcash_admin_verified') !== '1';
-    let validCode = ADMIN_REF_CODE;
 
     try {
-        const s = await db.collection('settings').doc('adminAccess').get();
-        if (s.exists && s.data().refCode) validCode = String(s.data().refCode).toUpperCase();
-    } catch (e) {}
+        showToast('Checking Admin permission...');
 
-    const codeOk = !firstAdminLogin || enteredCode === validCode;
-    if (ADMIN_IDS.includes(id) && codeOk) {
+        // Firestore Admin Document is the authority.
+        const adminSnap = await db.collection('admins').doc(user.uid).get();
+
+        if (!adminSnap.exists || adminSnap.data().active !== true) {
+            isAdmin = false;
+            showToast('❌ ဒီအကောင့်မှာ Admin ခွင့်ပြုချက်မရှိပါ', 'error');
+            return;
+        }
+
         isAdmin = true;
-        localStorage.setItem('realcash_admin_verified', '1');
+
         document.getElementById('adminLogin').style.display = 'none';
         document.getElementById('adminDashboard').style.display = 'block';
+
         const legacyRateInput = document.getElementById('adminRate');
         if (legacyRateInput) legacyRateInput.value = exchangeRate;
+
         const coinMmkInput = document.getElementById('adminCoinMmkRate');
         if (coinMmkInput) coinMmkInput.value = coinMmkRate || '';
-        document.getElementById('adminRefCodeManage').value = validCode;
-        document.getElementById('toggleWithdrawBtn').textContent = isWithdrawOpen ? '🔒 Close' : '🔓 Open';
+
+        const refCodeInput = document.getElementById('adminRefCodeManage');
+        if (refCodeInput) {
+            let validCode = ADMIN_REF_CODE;
+            try {
+                const s = await db.collection('settings').doc('adminAccess').get();
+                if (s.exists && s.data().refCode) {
+                    validCode = String(s.data().refCode).toUpperCase();
+                }
+            } catch (e) {
+                console.warn('Admin referral settings unavailable:', e);
+            }
+            refCodeInput.value = validCode;
+        }
+
+        const withdrawBtn = document.getElementById('toggleWithdrawBtn');
+        if (withdrawBtn) {
+            withdrawBtn.textContent = isWithdrawOpen ? '🔒 Close' : '🔓 Open';
+        }
+
         updateExchangeStatusUI();
         updateExchangeRateUI();
         updateAdRewardUI();
@@ -11052,10 +11070,15 @@ async function verifyAdmin() {
         loadAdList();
         loadDailyTop3Rewards();
         loadAdminAdAccessRequests();
-                                showToast('✅ Admin in');
+
+        console.log('ADMIN VERIFIED UID:', user.uid);
+        showToast('✅ Admin access verified');
         closeModal('adminModal');
-    } else {
-        showToast('❌ Admin ID / Referral Code မမှန်ပါ', 'error');
+
+    } catch (error) {
+        isAdmin = false;
+        console.error('ADMIN VERIFICATION ERROR:', error);
+        showToast('Admin verification failed: ' + (error.message || 'Unknown error'), 'error');
     }
 }
 async function sendAdminNotification() {
