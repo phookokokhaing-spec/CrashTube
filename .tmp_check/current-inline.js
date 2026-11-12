@@ -1,4 +1,6 @@
 
+
+
       atOptions = {
         'key' : 'cc7cd0a23b6233b016189f04e29fda5c',
         'format' : 'iframe',
@@ -7,7 +9,6 @@
         'params' : {}
       };
     
-;
 
 
 /* ============================================================
@@ -3908,6 +3909,125 @@ async function verifyAdmin() {
         showToast('Admin verification failed: ' + (error.message || 'Unknown error'), 'error');
     }
 }
+// ADMIN NOTIFICATION USER SEARCH
+window.adminNotificationSearchResults = [];
+
+async function searchAdminNotificationUsers() {
+    const input = document.getElementById('adminNotificationSearch');
+    const resultsBox = document.getElementById('adminNotificationSearchResults');
+    const status = document.getElementById('adminNotificationSearchMsg');
+    const button = document.getElementById('adminNotificationSearchBtn');
+    const uidInput = document.getElementById('adminNotificationUid');
+    const selectedBox = document.getElementById('adminNotificationSelected');
+
+    if (!isAdmin || !currentUser || !auth.currentUser) {
+        status.textContent = 'Admin login required.';
+        return;
+    }
+
+    const term = input.value.trim();
+
+    uidInput.value = '';
+    selectedBox.textContent = 'No user selected.';
+    resultsBox.replaceChildren();
+    window.adminNotificationSearchResults = [];
+
+    if (!term) {
+        status.textContent = 'Enter a Gmail address or Username.';
+        return;
+    }
+
+    if (term.length > 150) {
+        status.textContent = 'Search text is too long.';
+        return;
+    }
+
+    button.disabled = true;
+    status.textContent = 'Searching users...';
+
+    try {
+        const queries = [
+            db.collection('users').where('email', '==', term).limit(10).get(),
+            db.collection('users').where('email', '==', term.toLowerCase()).limit(10).get(),
+            db.collection('users').where('username', '==', term).limit(10).get()
+        ];
+
+        const snapshots = await Promise.all(queries);
+        const found = new Map();
+
+        snapshots.forEach(snapshot => {
+            snapshot.forEach(doc => {
+                found.set(doc.id, {
+                    uid: doc.id,
+                    username: String(doc.data().username || doc.data().name || 'User'),
+                    email: String(doc.data().email || '')
+                });
+            });
+        });
+
+        window.adminNotificationSearchResults = Array.from(found.values());
+
+        if (!window.adminNotificationSearchResults.length) {
+            status.textContent = 'No matching user found.';
+            return;
+        }
+
+        status.textContent =
+            window.adminNotificationSearchResults.length + ' matching account(s) found.';
+
+        window.adminNotificationSearchResults.forEach((user, index) => {
+            const card = document.createElement('div');
+            card.style.cssText =
+                'padding:10px;margin:6px 0;border:1px solid var(--border-color,#444);' +
+                'border-radius:10px;display:flex;justify-content:space-between;' +
+                'align-items:center;gap:10px;';
+
+            const details = document.createElement('div');
+            details.style.cssText = 'min-width:0;overflow-wrap:anywhere;';
+
+            const name = document.createElement('div');
+            name.style.fontWeight = 'bold';
+            name.textContent = user.username;
+
+            const email = document.createElement('div');
+            email.style.fontSize = '12px';
+            email.textContent = user.email || 'No email stored';
+
+            details.append(name, email);
+
+            const select = document.createElement('button');
+            select.type = 'button';
+            select.className = 'btn-primary';
+            select.textContent = 'Select';
+            select.addEventListener('click', () => {
+                selectAdminNotificationUser(index);
+            });
+
+            card.append(details, select);
+            resultsBox.appendChild(card);
+        });
+
+    } catch (error) {
+        console.error('NOTIFICATION USER SEARCH ERROR:', error);
+        status.textContent = 'Search failed: ' + (error.message || 'Permission denied');
+    } finally {
+        button.disabled = false;
+    }
+}
+
+function selectAdminNotificationUser(index) {
+    const users = window.adminNotificationSearchResults || [];
+    const user = users[index];
+
+    if (!user || !isAdmin || !auth.currentUser) return;
+
+    document.getElementById('adminNotificationUid').value = user.uid;
+    document.getElementById('adminNotificationSelected').textContent =
+        'Selected: ' + user.username + ' (' + (user.email || user.uid) + ')';
+
+    document.getElementById('adminNotificationMsg').textContent = '';
+}
+
 async function sendAdminNotification() {
     const uidInput = document.getElementById('adminNotificationUid');
     const titleInput = document.getElementById('adminNotificationTitle');
@@ -3953,6 +4073,13 @@ async function sendAdminNotification() {
         uidInput.value = '';
         titleInput.value = '';
         messageInput.value = '';
+
+        document.getElementById('adminNotificationSearch').value = '';
+        document.getElementById('adminNotificationSelected').textContent = 'No user selected.';
+        document.getElementById('adminNotificationSearchResults').replaceChildren();
+        document.getElementById('adminNotificationSearchMsg').textContent = '';
+        window.adminNotificationSearchResults = [];
+
         showToast('Notification sent successfully');
     } catch (error) {
         console.error('SEND NOTIFICATION ERROR:', error);
@@ -6574,7 +6701,6 @@ async function openLatestWithdrawalReceipt(){
 }
 
 
-;
 
 /* CASHTUBE_LOCAL_BAN_APPEAL_V1 */
 (function () {
@@ -6703,7 +6829,6 @@ async function openLatestWithdrawalReceipt(){
   });
 })();
 
-;
 
 /* CASHTUBE WEB PUSH REGISTRATION */
 window.enablePushNotifications = async function () {
