@@ -3362,6 +3362,7 @@ auth.onAuthStateChanged(async (user) => {
     if (user) {
         currentUser = user;
         resetNotificationState();
+        startNotificationListener(user.uid);
         refreshNotificationBadge();
         await loadAdAccess(user.uid);
         document.getElementById('authScreen').classList.remove('active');
@@ -5222,8 +5223,18 @@ document.querySelectorAll('.modal').forEach(el => {
 // ============================================================
 let notificationCache = [];
 let notificationCacheUid = null;
+let notificationUnsubscribe = null;
+let notificationListenerUid = null;
+let notificationInitialSnapshot = false;
 
 function resetNotificationState() {
+    if (typeof notificationUnsubscribe === 'function') {
+        notificationUnsubscribe();
+    }
+
+    notificationUnsubscribe = null;
+    notificationListenerUid = null;
+    notificationInitialSnapshot = false;
     notificationCache = [];
     notificationCacheUid = null;
 
@@ -5322,50 +5333,103 @@ function renderNotifications() {
     }).join('');
 }
 
+
+function startNotificationListener(uid) {
+    if (!uid || !currentUser || currentUser.uid !== uid) return;
+
+    if (notificationListenerUid === uid && notificationUnsubscribe) {
+        return;
+    }
+
+    if (typeof notificationUnsubscribe === 'function') {
+        notificationUnsubscribe();
+    }
+
+    notificationUnsubscribe = null;
+    notificationListenerUid = uid;
+    notificationInitialSnapshot = false;
+
+    notificationUnsubscribe = db.collection('notifications')
+        .doc(uid)
+        .collection('items')
+        .orderBy('createdAt', 'desc')
+        .limit(20)
+        .onSnapshot(snapshot => {
+            if (!currentUser || currentUser.uid !== uid) return;
+
+            const isFirstSnapshot = !notificationInitialSnapshot;
+            notificationInitialSnapshot = true;
+
+            notificationCache = snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            }));
+
+            notificationCacheUid = uid;
+
+            const unreadCount = notificationCache.filter(
+                item => item.read !== true
+            ).length;
+
+            const badge = document.getElementById('drawerNotificationBadge');
+
+            if (badge) {
+                badge.textContent = unreadCount >= 20
+                    ? '20+'
+                    : String(unreadCount);
+
+                badge.style.display = unreadCount > 0
+                    ? 'inline-flex'
+                    : 'none';
+            }
+
+            renderNotifications();
+
+            // Show an alert only for newly added notifications,
+            // not for old notifications during the initial load.
+            if (!isFirstSnapshot) {
+                const added = snapshot.docChanges().filter(
+                    change => change.type === 'added'
+                );
+
+                if (added.length > 0) {
+                    const newest = added[0].doc.data();
+
+                    showToast(
+                        '🔔 ' + (newest.title || 'New notification') +
+                        ': ' + (newest.message || ''),
+                        'success'
+                    );
+                }
+            }
+
+        }, error => {
+            console.error('Realtime notification listener failed:', error);
+        });
+}
+
 async function loadNotifications(forceRefresh = true) {
     const list = document.getElementById('notificationList');
 
     if (!currentUser) {
-        if (list) list.innerHTML = '<div style="padding:20px;text-align:center;">Please login first.</div>';
+        if (list) {
+            list.innerHTML =
+                '<div style="padding:20px;text-align:center;">Please login first.</div>';
+        }
         return;
     }
 
     const uid = currentUser.uid;
 
-    if (!forceRefresh && notificationCacheUid === uid) {
-        renderNotifications();
-        return;
+    if (list && !notificationCache.length) {
+        list.innerHTML =
+            '<div style="padding:25px;text-align:center;">Loading...</div>';
     }
 
-    if (list) list.innerHTML = '<div style="padding:25px;text-align:center;">Loading...</div>';
+    startNotificationListener(uid);
 
-    try {
-        const snap = await db.collection('notifications')
-            .doc(uid)
-            .collection('items')
-            .orderBy('createdAt', 'desc')
-            .limit(20)
-            .get();
-
-        if (!currentUser || currentUser.uid !== uid) return;
-
-        notificationCache = snap.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-        }));
-
-        notificationCacheUid = uid;
+    if (notificationCacheUid === uid) {
         renderNotifications();
-        refreshNotificationBadge();
-
-    } catch (error) {
-        console.error('Notification load failed:', error);
-        if (list) {
-            list.innerHTML = `
-                <div style="padding:20px;text-align:center;color:#ef4444;">
-                    Unable to load notifications. Please try again.
-                </div>`;
-        }
     }
 }
 
