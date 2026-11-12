@@ -11119,13 +11119,14 @@ async function searchAdminNotificationUsers() {
     }
 
     const term = input.value.trim();
+    const normalizedTerm = term.toLowerCase().replace(/^@/, '');
 
     uidInput.value = '';
     selectedBox.textContent = 'No user selected.';
     resultsBox.replaceChildren();
     window.adminNotificationSearchResults = [];
 
-    if (!term) {
+    if (!normalizedTerm) {
         status.textContent = 'Enter a Gmail address or Username.';
         return;
     }
@@ -11139,29 +11140,75 @@ async function searchAdminNotificationUsers() {
     status.textContent = 'Searching users...';
 
     try {
-        const queries = [
-            db.collection('users').where('email', '==', term).limit(10).get(),
-            db.collection('users').where('email', '==', term.toLowerCase()).limit(10).get(),
-            db.collection('users').where('username', '==', term).limit(10).get()
+        const found = new Map();
+        const usersRef = db.collection('users');
+
+        // First try indexed exact queries.
+        const exactQueries = [
+            usersRef.where('email', '==', term).limit(10).get(),
+            usersRef.where('email', '==', term.toLowerCase()).limit(10).get(),
+            usersRef.where('username', '==', term).limit(10).get()
         ];
 
-        const snapshots = await Promise.all(queries);
-        const found = new Map();
+        const exactSnapshots = await Promise.all(exactQueries);
 
-        snapshots.forEach(snapshot => {
+        exactSnapshots.forEach(snapshot => {
             snapshot.forEach(doc => {
+                const data = doc.data();
                 found.set(doc.id, {
                     uid: doc.id,
-                    username: String(doc.data().username || doc.data().name || 'User'),
-                    email: String(doc.data().email || '')
+                    username: String(data.username || data.name || 'User'),
+                    email: String(data.email || '')
                 });
             });
         });
 
+        // Fallback: scan users in pages to handle legacy capitalization,
+        // whitespace, and usernames beginning with @.
+        let lastDoc = null;
+        let scanned = 0;
+        const PAGE_SIZE = 200;
+        const MAX_SCAN = 5000;
+
+        while (found.size === 0 && scanned < MAX_SCAN) {
+            let query = usersRef
+                .orderBy(firebase.firestore.FieldPath.documentId())
+                .limit(PAGE_SIZE);
+
+            if (lastDoc) query = query.startAfter(lastDoc);
+
+            const page = await query.get();
+            if (page.empty) break;
+
+            for (const doc of page.docs) {
+                const data = doc.data();
+                const email = String(data.email || '').trim().toLowerCase();
+                const username = String(data.username || data.name || '')
+                    .trim().toLowerCase().replace(/^@/, '');
+
+                if (email === normalizedTerm || username === normalizedTerm) {
+                    found.set(doc.id, {
+                        uid: doc.id,
+                        username: String(data.username || data.name || 'User'),
+                        email: String(data.email || '')
+                    });
+                }
+            }
+
+            scanned += page.size;
+            lastDoc = page.docs[page.docs.length - 1];
+
+            if (page.size < PAGE_SIZE) break;
+
+            status.textContent = 'Searching users... ' + scanned + ' checked';
+        }
+
         window.adminNotificationSearchResults = Array.from(found.values());
 
         if (!window.adminNotificationSearchResults.length) {
-            status.textContent = 'No matching user found.';
+            status.textContent = scanned >= MAX_SCAN
+                ? 'No match in first ' + MAX_SCAN + ' users. Search limit reached.'
+                : 'No matching user found. Checked ' + scanned + ' users.';
             return;
         }
 
@@ -11202,7 +11249,8 @@ async function searchAdminNotificationUsers() {
 
     } catch (error) {
         console.error('NOTIFICATION USER SEARCH ERROR:', error);
-        status.textContent = 'Search failed: ' + (error.message || 'Permission denied');
+        status.textContent = 'Search failed: ' + (error.code || '') +
+            ' ' + (error.message || 'Permission denied');
     } finally {
         button.disabled = false;
     }
