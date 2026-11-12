@@ -182,13 +182,15 @@ service cloud.firestore {
           && d.keys().hasAll([
             'userId', 'email', 'username', 'packageId', 'packageName',
             'durationDays', 'amountMMK', 'paymentMethod', 'reference',
-            'status', 'requestedAt'
+            'status', 'requestedAt', 'historyId'
           ])
           && d.keys().hasOnly([
             'userId', 'email', 'username', 'packageId', 'packageName',
             'durationDays', 'amountMMK', 'paymentMethod', 'reference',
-            'status', 'requestedAt'
+            'status', 'requestedAt', 'historyId'
           ])
+          && d.historyId is string
+          && d.historyId.size() > 0
           && (
             (d.packageId == 'bronze' && d.packageName == 'Bronze'
               && d.durationDays == 15 && d.amountMMK == 5000)
@@ -216,6 +218,28 @@ service cloud.firestore {
           && validPendingAdAccessRequest());
 
       allow delete: if isAdmin();
+
+      match /history/{historyId} {
+        allow get, list: if isOwner(uid) || isAdmin();
+
+        allow create: if isOwner(uid)
+          && validPendingAdAccessRequest()
+          && request.resource.data.historyId == historyId
+          && getAfter(
+            /databases/$(database)/documents/adAccessRequests/$(uid)
+          ).data.historyId == historyId
+          && getAfter(
+            /databases/$(database)/documents/adAccessRequests/$(uid)
+          ).data.status == 'pending';
+
+        allow update: if isAdmin()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'status', 'approvedAt', 'approvedBy',
+            'rejectedAt', 'rejectedBy', 'expiresAt'
+          ]);
+
+        allow delete: if isAdmin();
+      }
     }
 
     match /{document=**} {

@@ -7274,6 +7274,130 @@ function updateAdAccessCountdownText() {
         `🎁 Free Ads Access ကျန်ချိန်: ${days} ရက် ${hours} နာရီ ${minutes} မိနစ် ${seconds} စက္ကန့်`;
 }
 
+
+function escapePurchaseText(value) {
+    return String(value ?? '').replace(/[&<>"']/g, ch => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+    })[ch]);
+}
+
+function formatPurchaseDate(value) {
+    if (!value) return '—';
+
+    const date = value.toDate
+        ? value.toDate()
+        : new Date(value);
+
+    if (Number.isNaN(date.getTime())) return '—';
+
+    return date.toLocaleString('en-GB', {
+        timeZone: 'Asia/Yangon',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+}
+
+function getPurchaseCenterHtml() {
+    const data = adAccessData || {};
+    const active = hasActiveAdAccess();
+    const expiry = data.expiresAt
+        ? formatPurchaseDate(data.expiresAt)
+        : '—';
+
+    return `
+        <div id="purchaseCenter" style="width:100%;margin:14px 0;padding:14px;border-radius:12px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);text-align:left;">
+            <div style="font-size:16px;font-weight:800;margin-bottom:10px;">🧾 My Purchases</div>
+            <div style="font-size:13px;line-height:1.9;">
+                <div>Package: <b>${escapePurchaseText(data.packageName || 'မဝယ်ယူရသေးပါ')}</b></div>
+                <div>Amount: <b>${data.amountMMK ? Number(data.amountMMK).toLocaleString('en-US') + ' MMK' : '—'}</b></div>
+                <div>Payment: <b>${escapePurchaseText(data.paymentMethod || '—')}</b></div>
+                <div>Purchase Date: <b>${formatPurchaseDate(data.purchaseAt || data.grantedAt)}</b></div>
+                <div>Expiry Date: <b>${expiry}</b></div>
+                <div>Status: <b>${active ? '🟢 Active' : '🔴 Expired / Inactive'}</b></div>
+            </div>
+            <button type="button" onclick="togglePurchaseHistory()" style="width:100%;margin-top:12px;padding:11px;border:0;border-radius:9px;background:#2563eb;color:white;font-weight:700;">
+                📜 Purchase History ကြည့်ရန်
+            </button>
+            <div id="purchaseHistoryPanel" style="display:none;margin-top:12px;font-size:13px;"></div>
+        </div>`;
+}
+
+async function togglePurchaseHistory() {
+    const panel = document.getElementById('purchaseHistoryPanel');
+    if (!panel || !currentUser) return;
+
+    if (panel.style.display !== 'none') {
+        panel.style.display = 'none';
+        return;
+    }
+
+    panel.style.display = 'block';
+
+    const uid = currentUser.uid;
+
+    if (purchaseHistoryCache && purchaseHistoryUid === uid) {
+        renderPurchaseHistoryItems(panel, purchaseHistoryCache);
+        return;
+    }
+
+    if (purchaseHistoryLoading) return;
+
+    purchaseHistoryLoading = true;
+    panel.innerHTML = '<div style="padding:10px;text-align:center;">မှတ်တမ်းများ ရယူနေပါသည်...</div>';
+
+    try {
+        const snapshot = await db.collection('adAccessRequests')
+            .doc(uid)
+            .collection('history')
+            .orderBy('requestedAt', 'desc')
+            .limit(20)
+            .get();
+
+        if (!currentUser || currentUser.uid !== uid) return;
+
+        purchaseHistoryCache = snapshot.docs.map(doc => doc.data());
+        purchaseHistoryUid = uid;
+
+        renderPurchaseHistoryItems(panel, purchaseHistoryCache);
+    } catch (error) {
+        console.error('PURCHASE HISTORY LOAD FAILED:', error);
+        panel.innerHTML = '<div style="padding:10px;color:#f87171;">မှတ်တမ်း ရယူ၍မရပါ။ Firestore Rules ကို စစ်ဆေးပါ။</div>';
+    } finally {
+        purchaseHistoryLoading = false;
+    }
+}
+
+function renderPurchaseHistoryItems(panel, items) {
+    if (!items || !items.length) {
+        panel.innerHTML = '<div style="padding:10px;text-align:center;opacity:.8;">ဝယ်ယူမှုမှတ်တမ်း မရှိသေးပါ။</div>';
+        return;
+    }
+
+    const statusText = {
+        pending: '🟡 Pending',
+        approved: '🟢 Approved',
+        rejected: '🔴 Rejected'
+    };
+
+    panel.innerHTML = items.map(item => `
+        <div style="padding:10px;margin-bottom:8px;border-radius:9px;background:rgba(255,255,255,.06);">
+            <div style="font-weight:800;">${escapePurchaseText(item.packageName || item.packageId || 'VIP Package')}</div>
+            <div>Amount: ${Number(item.amountMMK || 0).toLocaleString('en-US')} MMK</div>
+            <div>Payment: ${escapePurchaseText(item.paymentMethod || '—')}</div>
+            <div>Date: ${formatPurchaseDate(item.requestedAt)}</div>
+            <div>Status: ${statusText[item.status] || escapePurchaseText(item.status || '—')}</div>
+        </div>
+    `).join('');
+}
+
+
 function clearAdAccessState() {
     if (adAccessUnsubscribe) {
         adAccessUnsubscribe();
@@ -7284,6 +7408,11 @@ function clearAdAccessState() {
         adAccessRequestUnsubscribe = null;
     }
     adAccessRequestData = null;
+
+    // Clear purchase history cache on logout/account switch.
+    purchaseHistoryCache = null;
+    purchaseHistoryUid = null;
+    purchaseHistoryLoading = false;
 
     if (adAccessCountdownTimer) {
         clearInterval(adAccessCountdownTimer);
@@ -7308,6 +7437,18 @@ function loadAdAccessRequest(uid) {
     adAccessRequestUnsubscribe = db.collection('adAccessRequests').doc(uid)
         .onSnapshot(doc => {
             if (!currentUser || currentUser.uid !== uid) return;
+
+            // Invalidate cached purchase history when request data changes.
+            if (purchaseHistoryUid === uid) {
+                purchaseHistoryCache = null;
+                purchaseHistoryUid = null;
+
+                const historyPanel = document.getElementById('purchaseHistoryPanel');
+                if (historyPanel) {
+                    historyPanel.style.display = 'none';
+                }
+            }
+
             adAccessRequestData = doc.exists ? doc.data() : null;
             renderAdCards();
         }, error => {
@@ -7435,6 +7576,7 @@ async function requestAdAccess() {
         return;
     }
 
+    const uid = currentUser.uid;
     const packageId = document.getElementById('adAccessPackage')?.value || '';
     const method = document.getElementById('adAccessMethod')?.value || '';
     const referenceId = (document.getElementById('adAccessReferenceId')?.value || '').trim().toUpperCase();
@@ -7469,11 +7611,15 @@ async function requestAdAccess() {
     }
 
     try {
-        const userSnap = await db.collection('users').doc(currentUser.uid).get();
-        const profile = userSnap.exists ? userSnap.data() : {};
+        const userSnap = await db.collection('users').doc(uid).get();
+        if (!currentUser || currentUser.uid !== uid) return;
 
-        await db.collection('adAccessRequests').doc(currentUser.uid).set({
-            userId: currentUser.uid,
+        const profile = userSnap.exists ? userSnap.data() : {};
+        const requestRef = db.collection('adAccessRequests').doc(uid);
+        const historyRef = requestRef.collection('history').doc();
+
+        const requestData = {
+            userId: uid,
             email: currentUser.email || profile.email || '',
             username: profile.username || profile.name || currentUser.displayName || 'User',
             packageId: packageId,
@@ -7483,9 +7629,19 @@ async function requestAdAccess() {
             paymentMethod: method,
             reference: referenceId,
             status: 'pending',
-            requestedAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
+            requestedAt: firebase.firestore.FieldValue.serverTimestamp(),
+            historyId: historyRef.id
+        };
 
+        const batch = db.batch();
+        batch.set(requestRef, requestData);
+        batch.set(historyRef, requestData);
+        await batch.commit();
+
+        if (!currentUser || currentUser.uid !== uid) return;
+
+        purchaseHistoryCache = null;
+        purchaseHistoryUid = null;
         adAccessRequestData = { status: 'pending' };
         renderAdCards();
 
@@ -7616,7 +7772,11 @@ async function adminApproveAdAccessRequest(uid) {
             grantedBy: auth.currentUser.uid,
             durationDays: pkg.days,
             packageId: request.packageId,
-            packageName: pkg.name
+            packageName: pkg.name,
+            amountMMK: pkg.amount,
+            paymentMethod: request.paymentMethod,
+            reference: request.reference,
+            purchaseAt: request.requestedAt || firebase.firestore.FieldValue.serverTimestamp()
         }, { merge: true });
 
         batch.update(requestRef, {
@@ -7625,6 +7785,16 @@ async function adminApproveAdAccessRequest(uid) {
             approvedBy: auth.currentUser.uid,
             expiresAt: expiresAt
         });
+
+        if (request.historyId) {
+            const historyRef = requestRef.collection('history').doc(request.historyId);
+            batch.update(historyRef, {
+                status: 'approved',
+                approvedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                approvedBy: auth.currentUser.uid,
+                expiresAt: expiresAt
+            });
+        }
 
         await batch.commit();
 
@@ -7648,11 +7818,25 @@ async function adminRejectAdAccessRequest(uid) {
             return;
         }
 
-        await ref.update({
+        const request = snap.data();
+        const batch = db.batch();
+
+        batch.update(ref, {
             status: 'rejected',
             rejectedAt: firebase.firestore.FieldValue.serverTimestamp(),
             rejectedBy: auth.currentUser.uid
         });
+
+        if (request.historyId) {
+            const historyRef = ref.collection('history').doc(request.historyId);
+            batch.update(historyRef, {
+                status: 'rejected',
+                rejectedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                rejectedBy: auth.currentUser.uid
+            });
+        }
+
+        await batch.commit();
 
         showToast('Request ကို Reject လုပ်ပြီးပါပြီ။', 'success');
         await loadAdminAdAccessRequests();
@@ -8137,6 +8321,10 @@ let isExchangeOpen = true;
 let exchangeOpenDate = null;
 let isUpdatingCoins = false;
 let isAdPlaying = false;
+
+let purchaseHistoryCache = null;
+let purchaseHistoryUid = null;
+let purchaseHistoryLoading = false;
 
 let adAccessData = null;
 let adAccessLoaded = false;
@@ -8964,6 +9152,7 @@ function renderAdCards() {
                     VIP Package ဝယ်ယူပြီး Admin အတည်ပြုမှ Ads Access ရရှိပါမည်။
                 </div>
                 ${getAdAccessRequestPanelHtml()}
+                ${getPurchaseCenterHtml()}
             </div>`;
         renderAdAccessPaymentDestination();
         return;
@@ -8980,6 +9169,8 @@ function renderAdCards() {
     banner.style.cssText = 'width:100%;padding:10px;margin-bottom:10px;text-align:center;font-size:12px;border-radius:10px;';
     container.appendChild(banner);
     updateAdAccessCountdownText();
+
+    container.insertAdjacentHTML('beforeend', getPurchaseCenterHtml());
 
     AD_CARDS.forEach((card) => {
         const lastClaimKey = 'adClaim_' + card.id + '_' + (currentUser?.uid || 'guest');
