@@ -5951,6 +5951,12 @@ background: linear-gradient(
             <span>History</span>
             <i class="fas fa-chevron-right di-arrow"></i>
         </button>
+        <button class="drawer-item" onclick="closeDrawer(); openNotificationModal();">
+            <div class="di-icon mint"><i class="fas fa-bell"></i></div>
+            <span>Notifications</span>
+            <span class="di-badge" id="drawerNotificationBadge" style="display:none;">0</span>
+            <i class="fas fa-chevron-right di-arrow"></i>
+        </button>
 
         <div class="drawer-section-title">SETTINGS</div>
         <button class="drawer-item" onclick="toggleTheme();">
@@ -6778,6 +6784,17 @@ background: linear-gradient(
         </div>
     </div>
 
+    <!-- NOTIFICATION CENTER -->
+    <div id="notificationModal" class="modal">
+        <div class="modal-content">
+            <button class="modal-close" onclick="closeModal('notificationModal')">&times;</button>
+            <h3><i class="fas fa-bell"></i> Notifications</h3>
+            <div id="notificationList" style="max-height:450px;overflow-y:auto;">
+                <div style="text-align:center;padding:25px;">Loading...</div>
+            </div>
+        </div>
+    </div>
+
     <!-- ============================================================ -->
     <!-- MARKET MODAL -->
     <!-- ============================================================ -->
@@ -7124,6 +7141,32 @@ background: linear-gradient(
                     </div>
                 </div>
                 
+                <div class="admin-section" id="adminNotificationSection">
+                    <h4><i class="fas fa-bell"></i> Send User Notification</h4>
+                    <div class="admin-hint" style="margin-bottom:10px;">
+                        Send a notification to one user only. Enter the user's Firebase UID.
+                    </div>
+                    <label>User UID</label>
+                    <input id="adminNotificationUid" type="text"
+                        placeholder="Enter user UID" maxlength="128"
+                        autocomplete="off">
+                    <label>Notification Title</label>
+                    <input id="adminNotificationTitle" type="text"
+                        placeholder="Enter notification title" maxlength="80">
+                    <label>Message</label>
+                    <textarea id="adminNotificationMessage"
+                        placeholder="Write your notification message"
+                        maxlength="500" rows="4"
+                        style="width:100%;resize:vertical;"></textarea>
+                    <button class="btn-primary" onclick="sendAdminNotification()"
+                        id="adminSendNotificationBtn"
+                        style="width:100%;margin-top:10px;">
+                        <i class="fas fa-paper-plane"></i> Send Notification
+                    </button>
+                    <div id="adminNotificationMsg"
+                        class="admin-hint" style="margin-top:8px;"></div>
+                </div>
+
                 <button class="btn-primary btn-outline" onclick="adminLogout()"><i class="fas fa-sign-out-alt"></i> Logout</button>
             </div>
         </div>
@@ -10481,6 +10524,8 @@ async function handleLogout() {
 auth.onAuthStateChanged(async (user) => {
     if (user) {
         currentUser = user;
+        resetNotificationState();
+        refreshNotificationBadge();
         await loadAdAccess(user.uid);
         document.getElementById('authScreen').classList.remove('active');
         document.getElementById('appContainer').classList.add('active');
@@ -10605,6 +10650,7 @@ auth.onAuthStateChanged(async (user) => {
         setInterval(() => saveCoinsToLocal(userData.coins), 60000);
     } else {
         clearAdAccessState();
+        resetNotificationState();
         currentUser = null;
         document.getElementById('authScreen').classList.add('active');
         document.getElementById('appContainer').classList.remove('active');
@@ -11001,6 +11047,61 @@ async function verifyAdmin() {
         showToast('❌ Admin ID / Referral Code မမှန်ပါ', 'error');
     }
 }
+async function sendAdminNotification() {
+    const uidInput = document.getElementById('adminNotificationUid');
+    const titleInput = document.getElementById('adminNotificationTitle');
+    const messageInput = document.getElementById('adminNotificationMessage');
+    const status = document.getElementById('adminNotificationMsg');
+    const button = document.getElementById('adminSendNotificationBtn');
+
+    const uid = uidInput.value.trim();
+    const title = titleInput.value.trim();
+    const message = messageInput.value.trim();
+
+    if (!isAdmin || !currentUser || !auth.currentUser) {
+        showToast('Admin login required', 'error');
+        return;
+    }
+
+    if (!uid || !title || !message) {
+        status.textContent = 'Please fill in all fields.';
+        return;
+    }
+
+    if (uid.length > 128 || title.length > 80 || message.length > 500) {
+        status.textContent = 'Input is too long.';
+        return;
+    }
+
+    button.disabled = true;
+    status.textContent = 'Sending...';
+
+    try {
+        await db.collection('notifications')
+            .doc(uid)
+            .collection('items')
+            .add({
+                title: title,
+                message: message,
+                read: false,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                createdBy: auth.currentUser.uid
+            });
+
+        status.textContent = 'Notification sent successfully.';
+        uidInput.value = '';
+        titleInput.value = '';
+        messageInput.value = '';
+        showToast('Notification sent successfully');
+    } catch (error) {
+        console.error('SEND NOTIFICATION ERROR:', error);
+        status.textContent = 'Failed to send: ' + (error.message || 'Permission denied');
+        showToast('Could not send notification', 'error');
+    } finally {
+        button.disabled = false;
+    }
+}
+
 function adminLogout() {
     isAdmin = false;
     document.getElementById('adminLogin').style.display = 'block';
@@ -12079,6 +12180,194 @@ function closeModal(id) { document.getElementById(id).classList.remove('show'); 
 document.querySelectorAll('.modal').forEach(el => {
     el.addEventListener('click', (e) => { if (e.target === el) el.classList.remove('show'); });
 });
+
+// ============================================================
+// NOTIFICATION CENTER
+// ============================================================
+let notificationCache = [];
+let notificationCacheUid = null;
+
+function resetNotificationState() {
+    notificationCache = [];
+    notificationCacheUid = null;
+
+    const badge = document.getElementById('drawerNotificationBadge');
+    if (badge) {
+        badge.textContent = '0';
+        badge.style.display = 'none';
+    }
+
+    const list = document.getElementById('notificationList');
+    if (list) list.innerHTML = '';
+}
+
+function escapeNotificationText(value) {
+    return String(value || '').replace(/[&<>"']/g, ch => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+    })[ch]);
+}
+
+async function refreshNotificationBadge() {
+    if (!currentUser) return;
+
+    const uid = currentUser.uid;
+
+    try {
+        const snap = await db.collection('notifications')
+            .doc(uid)
+            .collection('items')
+            .where('read', '==', false)
+            .limit(20)
+            .get();
+
+        if (!currentUser || currentUser.uid !== uid) return;
+
+        const count = snap.size;
+        const badge = document.getElementById('drawerNotificationBadge');
+
+        if (badge) {
+            badge.textContent = count >= 20 ? '20+' : String(count);
+            badge.style.display = count > 0 ? 'inline-flex' : 'none';
+        }
+    } catch (error) {
+        console.warn('Notification badge load failed:', error);
+    }
+}
+
+function renderNotifications() {
+    const list = document.getElementById('notificationList');
+    if (!list) return;
+
+    if (!notificationCache.length) {
+        list.innerHTML = `
+            <div style="text-align:center;padding:30px 15px;color:var(--text-muted);">
+                <i class="fas fa-bell-slash" style="font-size:30px;margin-bottom:12px;"></i>
+                <div>No notifications yet</div>
+            </div>`;
+        return;
+    }
+
+    list.innerHTML = notificationCache.map(item => {
+        const title = escapeNotificationText(item.title);
+        const message = escapeNotificationText(item.message);
+        const unread = item.read !== true;
+        const date = item.createdAt && item.createdAt.toDate
+            ? item.createdAt.toDate().toLocaleString('en-GB', {
+                timeZone: 'Asia/Yangon',
+                dateStyle: 'medium',
+                timeStyle: 'short'
+            })
+            : 'Recently';
+
+        return `
+            <div style="padding:15px;margin:10px 0;border-radius:16px;
+                background:var(--bg-card);border:1px solid var(--border-color);
+                ${unread ? 'border-left:4px solid #8b5cf6;' : ''}">
+                <div style="display:flex;justify-content:space-between;gap:8px;">
+                    <strong>${title}</strong>
+                    ${unread ? '<span style="color:#8b5cf6;font-size:11px;">NEW</span>' : ''}
+                </div>
+                <div style="margin-top:9px;line-height:1.6;overflow-wrap:anywhere;">
+                    ${message}
+                </div>
+                <div style="font-size:11px;color:var(--text-muted);margin-top:10px;">
+                    ${escapeNotificationText(date)}
+                </div>
+                ${unread ? `
+                    <button class="btn-primary" style="margin-top:10px;padding:8px 14px;"
+                        onclick="markNotificationRead('${item.id}')">
+                        Mark as read
+                    </button>` : ''}
+            </div>`;
+    }).join('');
+}
+
+async function loadNotifications(forceRefresh = true) {
+    const list = document.getElementById('notificationList');
+
+    if (!currentUser) {
+        if (list) list.innerHTML = '<div style="padding:20px;text-align:center;">Please login first.</div>';
+        return;
+    }
+
+    const uid = currentUser.uid;
+
+    if (!forceRefresh && notificationCacheUid === uid) {
+        renderNotifications();
+        return;
+    }
+
+    if (list) list.innerHTML = '<div style="padding:25px;text-align:center;">Loading...</div>';
+
+    try {
+        const snap = await db.collection('notifications')
+            .doc(uid)
+            .collection('items')
+            .orderBy('createdAt', 'desc')
+            .limit(20)
+            .get();
+
+        if (!currentUser || currentUser.uid !== uid) return;
+
+        notificationCache = snap.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        }));
+
+        notificationCacheUid = uid;
+        renderNotifications();
+        refreshNotificationBadge();
+
+    } catch (error) {
+        console.error('Notification load failed:', error);
+        if (list) {
+            list.innerHTML = `
+                <div style="padding:20px;text-align:center;color:#ef4444;">
+                    Unable to load notifications. Please try again.
+                </div>`;
+        }
+    }
+}
+
+function openNotificationModal() {
+    openModal('notificationModal');
+    loadNotifications(true);
+}
+
+async function markNotificationRead(notificationId) {
+    if (!currentUser || !notificationId) return;
+
+    const uid = currentUser.uid;
+    const item = notificationCache.find(x => x.id === notificationId);
+
+    if (!item || item.read === true) return;
+
+    try {
+        await db.collection('notifications')
+            .doc(uid)
+            .collection('items')
+            .doc(notificationId)
+            .update({
+                read: true,
+                readAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+
+        if (!currentUser || currentUser.uid !== uid) return;
+
+        item.read = true;
+        renderNotifications();
+        await refreshNotificationBadge();
+
+    } catch (error) {
+        console.error('Mark notification read failed:', error);
+        showToast('Notification ကို ဖတ်ပြီးအဖြစ် မပြောင်းနိုင်ပါ', 'error');
+    }
+}
+
 function openHistoryModal() { openModal('historyModal'); setTimeout(loadTransactionHistory, 300); }
 function scrollToAds() { document.getElementById('adsSection').scrollIntoView({ behavior: 'smooth' }); }
 
