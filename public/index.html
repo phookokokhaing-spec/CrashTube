@@ -7304,6 +7304,7 @@ function formatPurchaseDate(value) {
     });
 }
 
+
 function getPurchaseCenterHtml() {
     const data = adAccessData || {};
     const active = hasActiveAdAccess();
@@ -7311,21 +7312,271 @@ function getPurchaseCenterHtml() {
         ? formatPurchaseDate(data.expiresAt)
         : '—';
 
+    const amount = data.amountMMK
+        ? Number(data.amountMMK).toLocaleString('en-US') + ' MMK'
+        : '—';
+
+    const packageName = escapePurchaseText(data.packageName || 'မဝယ်ယူရသေးပါ');
+    const payment = escapePurchaseText(data.paymentMethod || '—');
+
     return `
-        <div id="purchaseCenter" style="width:100%;margin:14px 0;padding:14px;border-radius:12px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);text-align:left;">
-            <div style="font-size:16px;font-weight:800;margin-bottom:10px;">🧾 My Purchases</div>
-            <div style="font-size:13px;line-height:1.9;">
-                <div>Package: <b>${escapePurchaseText(data.packageName || 'မဝယ်ယူရသေးပါ')}</b></div>
-                <div>Amount: <b>${data.amountMMK ? Number(data.amountMMK).toLocaleString('en-US') + ' MMK' : '—'}</b></div>
-                <div>Payment: <b>${escapePurchaseText(data.paymentMethod || '—')}</b></div>
-                <div>Purchase Date: <b>${formatPurchaseDate(data.purchaseAt || data.grantedAt)}</b></div>
-                <div>Expiry Date: <b>${expiry}</b></div>
-                <div>Status: <b>${active ? '🟢 Active' : '🔴 Expired / Inactive'}</b></div>
+        <style>
+        #purchaseCenter {
+            width:100%;
+            margin:16px 0;
+            padding:16px;
+            box-sizing:border-box;
+            border-radius:20px;
+            background:linear-gradient(145deg,rgba(35,31,65,.96),rgba(15,18,39,.96));
+            border:1px solid rgba(155,120,255,.35);
+            box-shadow:0 8px 28px rgba(0,0,0,.28),0 0 18px rgba(111,75,255,.10);
+            text-align:left;
+            position:relative;
+            overflow:hidden;
+        }
+        #purchaseCenter:before {
+            content:"";
+            position:absolute;
+            top:0;left:0;right:0;
+            height:3px;
+            background:linear-gradient(90deg,#8b5cf6,#22d3ee,#ec4899);
+        }
+        #purchaseCenter .pc-heading {
+            display:flex;
+            align-items:center;
+            gap:10px;
+            margin-bottom:16px;
+            font-size:18px;
+            font-weight:900;
+            color:#fff;
+        }
+        #purchaseCenter .pc-heading-icon {
+            width:42px;height:42px;
+            display:flex;align-items:center;justify-content:center;
+            border-radius:13px;
+            background:linear-gradient(135deg,#7545e8,#287de8);
+            box-shadow:0 4px 14px rgba(115,75,255,.35);
+            font-size:21px;
+        }
+        #purchaseCenter .pc-package {
+            display:flex;
+            align-items:center;
+            justify-content:space-between;
+            gap:8px;
+            padding:13px;
+            margin-bottom:12px;
+            border-radius:14px;
+            background:linear-gradient(110deg,rgba(124,78,255,.20),rgba(34,211,238,.08));
+            border:1px solid rgba(167,139,250,.25);
+        }
+        #purchaseCenter .pc-package-label {
+            font-size:11px;
+            color:#b9b5d6;
+            margin-bottom:4px;
+        }
+        #purchaseCenter .pc-package-name {
+            font-size:19px;
+            font-weight:900;
+            color:#fff;
+        }
+        #purchaseCenter .pc-package-badge {
+            padding:7px 11px;
+            border-radius:20px;
+            background:rgba(139,92,246,.22);
+            border:1px solid rgba(196,181,253,.4);
+            color:#d8c9ff;
+            font-size:11px;
+            font-weight:800;
+        }
+        #purchaseCenter .pc-amount {
+            font-size:19px;
+            font-weight:900;
+            color:#67e8f9;
+        }
+        #purchaseCenter .pc-info-grid {
+            display:grid;
+            grid-template-columns:1fr 1fr;
+            gap:9px;
+        }
+        #purchaseCenter .pc-info {
+            min-width:0;
+            padding:11px;
+            border-radius:12px;
+            background:rgba(255,255,255,.055);
+            border:1px solid rgba(255,255,255,.08);
+        }
+        #purchaseCenter .pc-info-label {
+            font-size:11px;
+            color:#aaa8c5;
+            margin-bottom:6px;
+        }
+        #purchaseCenter .pc-info-value {
+            font-size:13px;
+            font-weight:800;
+            color:#f5f3ff;
+            line-height:1.5;
+            overflow-wrap:anywhere;
+        }
+        #purchaseCenter .pc-status {
+            display:inline-flex;
+            align-items:center;
+            gap:6px;
+            padding:7px 12px;
+            margin-top:13px;
+            border-radius:20px;
+            background:rgba(34,197,94,.13);
+            border:1px solid rgba(74,222,128,.3);
+            color:#86efac;
+            font-size:12px;
+            font-weight:900;
+        }
+        #purchaseCenter .pc-status.inactive {
+            background:rgba(248,113,113,.12);
+            border-color:rgba(248,113,113,.3);
+            color:#fca5a5;
+        }
+        #purchaseCenter .pc-history-btn {
+            width:100%;
+            margin-top:15px;
+            padding:13px;
+            border:1px solid rgba(196,181,253,.3);
+            border-radius:13px;
+            background:linear-gradient(110deg,#7545e8,#3869e9);
+            color:#fff;
+            font-size:14px;
+            font-weight:900;
+            box-shadow:0 5px 16px rgba(89,75,220,.28);
+        }
+        #purchaseCenter .pc-history-title {
+            display:flex;
+            align-items:center;
+            gap:8px;
+            margin:16px 0 10px;
+            padding-top:13px;
+            border-top:1px solid rgba(255,255,255,.10);
+            color:#e9ddff;
+            font-size:14px;
+            font-weight:900;
+        }
+        #purchaseHistoryPanel {
+            display:none;
+            margin-top:12px;
+            font-size:13px;
+        }
+        #purchaseHistoryPanel .pc-history-item {
+            padding:13px;
+            margin-bottom:10px;
+            border-radius:14px;
+            background:linear-gradient(135deg,rgba(255,255,255,.075),rgba(255,255,255,.025));
+            border:1px solid rgba(167,139,250,.18);
+        }
+        #purchaseHistoryPanel .pc-history-top {
+            display:flex;
+            justify-content:space-between;
+            align-items:center;
+            flex-wrap:wrap;
+            gap:8px;
+            margin-bottom:10px;
+        }
+        #purchaseHistoryPanel .pc-history-package {
+            color:#fff;
+            font-size:15px;
+            font-weight:900;
+        }
+        #purchaseHistoryPanel .pc-history-status {
+            padding:5px 9px;
+            border-radius:20px;
+            font-size:10px;
+            font-weight:900;
+            background:rgba(250,204,21,.13);
+            color:#fde68a;
+            border:1px solid rgba(250,204,21,.25);
+        }
+        #purchaseHistoryPanel .pc-history-status.approved {
+            background:rgba(34,197,94,.13);
+            color:#86efac;
+            border-color:rgba(74,222,128,.25);
+        }
+        #purchaseHistoryPanel .pc-history-status.rejected {
+            background:rgba(248,113,113,.13);
+            color:#fca5a5;
+            border-color:rgba(248,113,113,.25);
+        }
+        #purchaseHistoryPanel .pc-history-details {
+            display:grid;
+            grid-template-columns:1fr 1fr;
+            gap:8px;
+        }
+        #purchaseHistoryPanel .pc-history-detail {
+            color:#bdbbd3;
+            font-size:11px;
+            line-height:1.5;
+        }
+        #purchaseHistoryPanel .pc-history-detail b {
+            display:block;
+            margin-top:3px;
+            color:#f3f0ff;
+            font-size:12px;
+            overflow-wrap:anywhere;
+        }
+        #purchaseHistoryPanel .pc-empty {
+            padding:20px 12px;
+            text-align:center;
+            color:#aaa8c5;
+            border:1px dashed rgba(167,139,250,.3);
+            border-radius:13px;
+        }
+        @media(max-width:360px) {
+            #purchaseCenter .pc-info-grid,
+            #purchaseHistoryPanel .pc-history-details {
+                grid-template-columns:1fr;
+            }
+        }
+        </style>
+
+        <div id="purchaseCenter">
+            <div class="pc-heading">
+                <span class="pc-heading-icon">💎</span>
+                <span>My Purchases</span>
             </div>
-            <button type="button" onclick="togglePurchaseHistory()" style="width:100%;margin-top:12px;padding:11px;border:0;border-radius:9px;background:#2563eb;color:white;font-weight:700;">
-                📜 Purchase History ကြည့်ရန်
+
+            <div class="pc-package">
+                <div>
+                    <div class="pc-package-label">YOUR VIP PACKAGE</div>
+                    <div class="pc-package-name">${packageName}</div>
+                </div>
+                <span class="pc-package-badge">✦ VIP MEMBER</span>
+            </div>
+
+            <div class="pc-info-grid">
+                <div class="pc-info">
+                    <div class="pc-info-label">💰 PACKAGE AMOUNT</div>
+                    <div class="pc-amount">${amount}</div>
+                </div>
+                <div class="pc-info">
+                    <div class="pc-info-label">💳 PAYMENT METHOD</div>
+                    <div class="pc-info-value">${payment}</div>
+                </div>
+                <div class="pc-info">
+                    <div class="pc-info-label">🛒 PURCHASE DATE</div>
+                    <div class="pc-info-value">${formatPurchaseDate(data.purchaseAt || data.grantedAt)}</div>
+                </div>
+                <div class="pc-info">
+                    <div class="pc-info-label">⏳ EXPIRY DATE</div>
+                    <div class="pc-info-value">${expiry}</div>
+                </div>
+            </div>
+
+            <div class="pc-status ${active ? '' : 'inactive'}">
+                ${active ? '● ACTIVE MEMBERSHIP' : '● EXPIRED / INACTIVE'}
+            </div>
+
+            <button type="button" class="pc-history-btn" onclick="togglePurchaseHistory()">
+                📜 &nbsp; Purchase History ကြည့်ရန်
             </button>
-            <div id="purchaseHistoryPanel" style="display:none;margin-top:12px;font-size:13px;"></div>
+
+            <div class="pc-history-title">🏆 PURCHASE RECORDS</div>
+            <div id="purchaseHistoryPanel"></div>
         </div>`;
 }
 
@@ -7374,29 +7625,61 @@ async function togglePurchaseHistory() {
     }
 }
 
+
 function renderPurchaseHistoryItems(panel, items) {
     if (!items || !items.length) {
-        panel.innerHTML = '<div style="padding:10px;text-align:center;opacity:.8;">ဝယ်ယူမှုမှတ်တမ်း မရှိသေးပါ။</div>';
+        panel.innerHTML = `
+            <div class="pc-empty">
+                <div style="font-size:27px;margin-bottom:7px;">📭</div>
+                ဝယ်ယူမှုမှတ်တမ်း မရှိသေးပါ။
+            </div>`;
         return;
     }
 
     const statusText = {
-        pending: '🟡 Pending',
-        approved: '🟢 Approved',
-        rejected: '🔴 Rejected'
+        pending: '● PENDING',
+        approved: '● APPROVED',
+        rejected: '● REJECTED'
     };
 
-    panel.innerHTML = items.map(item => `
-        <div style="padding:10px;margin-bottom:8px;border-radius:9px;background:rgba(255,255,255,.06);">
-            <div style="font-weight:800;">${escapePurchaseText(item.packageName || item.packageId || 'VIP Package')}</div>
-            <div>Amount: ${Number(item.amountMMK || 0).toLocaleString('en-US')} MMK</div>
-            <div>Payment: ${escapePurchaseText(item.paymentMethod || '—')}</div>
-            <div>Date: ${formatPurchaseDate(item.requestedAt)}</div>
-            <div>Status: ${statusText[item.status] || escapePurchaseText(item.status || '—')}</div>
-        </div>
-    `).join('');
-}
+    panel.innerHTML = items.map(item => {
+        const status = String(item.status || '').toLowerCase();
+        const statusClass = ['approved', 'rejected'].includes(status) ? status : '';
+        const packageName = escapePurchaseText(
+            item.packageName || item.packageId || 'VIP Package'
+        );
+        const payment = escapePurchaseText(item.paymentMethod || '—');
+        const amount = Number(item.amountMMK || 0).toLocaleString('en-US') + ' MMK';
 
+        return `
+            <div class="pc-history-item">
+                <div class="pc-history-top">
+                    <div class="pc-history-package">💎 ${packageName}</div>
+                    <span class="pc-history-status ${statusClass}">
+                        ${statusText[status] || escapePurchaseText(item.status || '—')}
+                    </span>
+                </div>
+                <div class="pc-history-details">
+                    <div class="pc-history-detail">
+                        💰 Amount
+                        <b>${amount}</b>
+                    </div>
+                    <div class="pc-history-detail">
+                        💳 Payment
+                        <b>${payment}</b>
+                    </div>
+                    <div class="pc-history-detail">
+                        📅 Request Date
+                        <b>${formatPurchaseDate(item.requestedAt)}</b>
+                    </div>
+                    <div class="pc-history-detail">
+                        🧾 Reference ID
+                        <b>${escapePurchaseText(item.reference || '—')}</b>
+                    </div>
+                </div>
+            </div>`;
+    }).join('');
+}
 
 function clearAdAccessState() {
     if (adAccessUnsubscribe) {
