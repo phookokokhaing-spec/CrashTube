@@ -7316,59 +7316,117 @@ function loadAdAccessRequest(uid) {
 }
 
 
+
+function renderAdAccessPaymentDestination() {
+    const box = document.getElementById('adAccessPaymentDestination');
+    if (!box) return;
+
+    const method = document.getElementById('adAccessMethod')?.value || 'WavePay';
+    const packageId = document.getElementById('adAccessPackage')?.value || 'bronze';
+
+    const packages = {
+        bronze: { name: 'Bronze', days: 15, amount: 5000 },
+        silver: { name: 'Silver', days: 30, amount: 10000 },
+        gold: { name: 'Gold', days: 60, amount: 20000 },
+        diamond: { name: 'Diamond', days: 90, amount: 30000 }
+    };
+
+    const pkg = packages[packageId];
+    const isWave = method === 'WavePay';
+    const name = isWave ? levelPaymentAccounts.waveName : levelPaymentAccounts.kpayName;
+    const phone = isWave ? levelPaymentAccounts.wavePhone : levelPaymentAccounts.kpayPhone;
+
+    const account = name && phone
+        ? `<b>${isWave ? 'WavePay' : 'KBZPay'} ငွေလက်ခံအကောင့်</b><br>
+           အမည်: ${escapeAdAccessText(name)}<br>
+           ဖုန်း / အကောင့်: ${escapeAdAccessText(phone)}`
+        : `<b>${isWave ? 'WavePay' : 'KBZPay'} အကောင့် မသတ်မှတ်ရသေးပါ။</b><br>
+           Admin က Payment Receiving Accounts ကို ဖြည့်ပေးရပါမည်။`;
+
+    box.innerHTML = `
+        <div style="font-weight:800;color:#16a085;margin-bottom:8px;">
+            ${pkg.name} Package — ${pkg.days} ရက်
+        </div>
+        <div style="font-size:17px;font-weight:900;margin-bottom:10px;">
+            ${pkg.amount.toLocaleString('en-US')} MMK
+        </div>
+        ${account}
+        <small style="display:block;margin-top:8px;opacity:.8;">
+            ငွေလွှဲပြီး Reference ID ၅ လုံး ထည့်ပါ။
+        </small>`;
+}
+
 function getAdAccessRequestPanelHtml() {
     const req = adAccessRequestData || {};
 
     if (req.status === 'pending') {
-        return '<div style="margin-top:16px;padding:12px;border-radius:12px;background:rgba(245,158,11,.12);color:#f59e0b;font-weight:800;">⏳ Access Request Pending — Admin အတည်ပြုချက်ကို စောင့်ဆိုင်းနေပါသည်။</div>';
+        return `
+            <div style="margin-top:16px;padding:14px;border-radius:12px;background:rgba(245,158,11,.12);color:#f59e0b;font-weight:800;">
+                ⏳ VIP Package Request ကို Admin စစ်ဆေးနေပါသည်။
+            </div>`;
     }
 
     let notice = '';
 
     if (req.status === 'rejected') {
-        notice = '<div style="margin-top:12px;color:#ef7777;font-size:12px;">❌ Request ကို Admin မှ Reject လုပ်ထားပါသည်။ ပြန်လည် Request တင်နိုင်ပါသည်။</div>';
+        notice = `
+            <div style="margin:12px 0;color:#ef7777;font-size:12px;">
+                ❌ ယခင် Request ကို Reject လုပ်ထားပါသည်။ ပြန်လည် Request တင်နိုင်ပါသည်။
+            </div>`;
     }
 
-    if (req.status === 'approved' && req.expiresAt) {
-        let expiry = 0;
-        if (typeof req.expiresAt.toMillis === 'function') expiry = req.expiresAt.toMillis();
-        else if (typeof req.expiresAt.toDate === 'function') expiry = req.expiresAt.toDate().getTime();
-
-        if (expiry > 0 && expiry > Date.now()) {
-            return '<div style="margin-top:12px;color:#16a085;font-size:12px;">✅ Ads Access ရရှိထားပါသည်။</div>';
-        }
-
-        notice = '<div style="margin-top:12px;color:#f59e0b;font-size:12px;">⌛ ယခင် Access သက်တမ်းကုန်ဆုံးပါပြီ။</div>';
+    if (req.status === 'approved') {
+        notice = `
+            <div style="margin:12px 0;color:#16a085;font-size:12px;">
+                ✅ ယခင် Package Request အတည်ပြုပြီးပါပြီ။ Package အသစ် ဝယ်ယူနိုင်ပါသည်။
+            </div>`;
     }
 
     return `
         ${notice}
         <div style="margin-top:16px;padding:14px;border-radius:14px;background:rgba(255,255,255,.06);text-align:left;">
             <label style="display:block;font-size:13px;font-weight:800;margin-bottom:8px;">
+                💎 VIP Package ရွေးချယ်ပါ
+            </label>
+
+            <select id="adAccessPackage" onchange="renderAdAccessPaymentDestination()"
+                style="width:100%;padding:12px;border-radius:10px;background:#202638;color:white;font-size:14px;">
+                <option value="bronze">Bronze — 15 ရက် — 5,000 MMK</option>
+                <option value="silver">Silver — 30 ရက် — 10,000 MMK</option>
+                <option value="gold">Gold — 60 ရက် — 20,000 MMK</option>
+                <option value="diamond">Diamond — 90 ရက် — 30,000 MMK</option>
+            </select>
+
+            <label style="display:block;font-size:13px;font-weight:800;margin:14px 0 8px;">
                 💳 Payment Method
             </label>
-            <select id="adAccessMethod"
-                style="width:100%;padding:12px;border-radius:10px;border:1px solid rgba(255,255,255,.2);background:#202638;color:white;font-size:14px;">
+
+            <select id="adAccessMethod" onchange="renderAdAccessPaymentDestination()"
+                style="width:100%;padding:12px;border-radius:10px;background:#202638;color:white;font-size:14px;">
                 <option value="WavePay">WavePay</option>
                 <option value="KBZPay">KBZPay</option>
             </select>
 
+            <div id="adAccessPaymentDestination"
+                style="margin-top:12px;padding:12px;border-radius:10px;background:rgba(22,160,133,.12);font-size:13px;line-height:1.8;">
+            </div>
+
             <label style="display:block;font-size:13px;font-weight:800;margin:14px 0 8px;">
-                🆔 Request Reference ID (၅ လုံး)
+                🆔 Payment Reference ID (၅ လုံး)
             </label>
-            <input id="adAccessReferenceId"
-                type="text"
-                maxlength="5"
-                minlength="5"
-                placeholder="ဥပမာ - A12B3"
-                autocomplete="off"
-                style="width:100%;box-sizing:border-box;padding:12px;border-radius:10px;border:1px solid rgba(255,255,255,.2);background:#202638;color:white;font-size:15px;text-align:center;letter-spacing:3px;text-transform:uppercase;">
+
+            <input id="adAccessReferenceId" type="text" maxlength="5" minlength="5"
+                placeholder="ဥပမာ - A12B3" autocomplete="off"
+                style="width:100%;box-sizing:border-box;padding:12px;border-radius:10px;background:#202638;color:white;font-size:15px;text-align:center;letter-spacing:3px;text-transform:uppercase;">
+
             <button onclick="requestAdAccess()"
-                style="display:block;width:100%;margin-top:14px;padding:13px 16px;border:0;border-radius:12px;background:#16a085;color:white;font-weight:800;font-size:14px;cursor:pointer;">
-                📩 Request Ads Access
+                style="display:block;width:100%;margin-top:14px;padding:13px;border:0;border-radius:12px;background:#16a085;color:white;font-weight:800;font-size:14px;">
+                📩 VIP Package Request
             </button>
         </div>`;
 }
+
+
 
 
 async function requestAdAccess() {
@@ -7377,46 +7435,67 @@ async function requestAdAccess() {
         return;
     }
 
-    const methodInput = document.getElementById('adAccessMethod');
-    const referenceInput = document.getElementById('adAccessReferenceId');
+    const packageId = document.getElementById('adAccessPackage')?.value || '';
+    const method = document.getElementById('adAccessMethod')?.value || '';
+    const referenceId = (document.getElementById('adAccessReferenceId')?.value || '').trim().toUpperCase();
 
-    if (methodInput && referenceInput) {
-        const referenceId = referenceInput.value.trim().toUpperCase();
+    const packages = {
+        bronze: { name: 'Bronze', days: 15, amount: 5000 },
+        silver: { name: 'Silver', days: 30, amount: 10000 },
+        gold: { name: 'Gold', days: 60, amount: 20000 },
+        diamond: { name: 'Diamond', days: 90, amount: 30000 }
+    };
 
-        if (!/^[A-Z0-9]{5}$/.test(referenceId)) {
-            showToast('Reference ID ကို အက္ခရာ/ဂဏန်း ၅ လုံး အတိအကျ ထည့်ပါ။', 'error');
-            referenceInput.focus();
-            return;
-        }
-    }
-    if (hasActiveAdAccess()) {
-        showToast('Ads Access ရရှိထားပြီးပါပြီ။', 'warning');
+    const pkg = packages[packageId];
+
+    if (!pkg) {
+        showToast('VIP Package ကို ရွေးချယ်ပါ။', 'error');
         return;
     }
+
+    if (!['WavePay', 'KBZPay'].includes(method)) {
+        showToast('Payment Method မှန်ကန်စွာ ရွေးချယ်ပါ။', 'error');
+        return;
+    }
+
+    if (!/^[A-Z0-9]{5}$/.test(referenceId)) {
+        showToast('Reference ID ကို အက္ခရာ/ဂဏန်း ၅ လုံး ထည့်ပါ။', 'error');
+        return;
+    }
+
     if (adAccessRequestData && adAccessRequestData.status === 'pending') {
         showToast('Request ကို စစ်ဆေးနေဆဲဖြစ်ပါသည်။', 'warning');
         return;
     }
 
     try {
-        const userRef = db.collection('users').doc(currentUser.uid);
-        const userSnap = await userRef.get();
+        const userSnap = await db.collection('users').doc(currentUser.uid).get();
         const profile = userSnap.exists ? userSnap.data() : {};
 
         await db.collection('adAccessRequests').doc(currentUser.uid).set({
             userId: currentUser.uid,
             email: currentUser.email || profile.email || '',
             username: profile.username || profile.name || currentUser.displayName || 'User',
+            packageId: packageId,
+            packageName: pkg.name,
+            durationDays: pkg.days,
+            amountMMK: pkg.amount,
+            paymentMethod: method,
+            reference: referenceId,
             status: 'pending',
             requestedAt: firebase.firestore.FieldValue.serverTimestamp()
         });
 
-        showToast('✅ Ads Access Request တင်ပြီးပါပြီ။', 'success');
+        adAccessRequestData = { status: 'pending' };
+        renderAdCards();
+
+        showToast('✅ VIP Package Request တင်ပြီးပါပြီ။', 'success');
     } catch (e) {
         console.error('AD ACCESS REQUEST FAILED:', e);
         showToast('❌ Request မတင်နိုင်ပါ: ' + (e.message || e.code), 'error');
     }
 }
+
 
 function escapeAdAccessText(value) {
     return String(value || '').replace(/[&<>"']/g, ch => ({
@@ -7424,6 +7503,7 @@ function escapeAdAccessText(value) {
         '"': '&quot;', "'": '&#39;'
     })[ch]);
 }
+
 
 async function loadAdminAdAccessRequests() {
     const box = document.getElementById('adminAdAccessRequestsList');
@@ -7443,17 +7523,24 @@ async function loadAdminAdAccessRequests() {
 
         const rows = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         rows.sort((a, b) => {
-            const at = a.requestedAt && a.requestedAt.toMillis ? a.requestedAt.toMillis() : 0;
-            const bt = b.requestedAt && b.requestedAt.toMillis ? b.requestedAt.toMillis() : 0;
+            const at = a.requestedAt?.toMillis ? a.requestedAt.toMillis() : 0;
+            const bt = b.requestedAt?.toMillis ? b.requestedAt.toMillis() : 0;
             return at - bt;
         });
 
         box.innerHTML = rows.map(item => `
             <div style="padding:12px;margin:8px 0;border:1px solid rgba(255,255,255,.14);border-radius:12px;">
                 <div style="font-weight:800;">${escapeAdAccessText(item.username || 'User')}</div>
-                <div style="font-size:12px;opacity:.8;margin:4px 0 10px;">${escapeAdAccessText(item.email)}</div>
+                <div style="font-size:12px;opacity:.8;margin:4px 0;">${escapeAdAccessText(item.email || '')}</div>
+                <div style="font-size:13px;line-height:1.8;margin:8px 0;">
+                    💎 Package: <b>${escapeAdAccessText(item.packageName || item.packageId || '')}</b><br>
+                    ⏳ Duration: <b>${Number(item.durationDays || 0)} ရက်</b><br>
+                    💰 Amount: <b>${Number(item.amountMMK || 0).toLocaleString('en-US')} MMK</b><br>
+                    💳 Method: <b>${escapeAdAccessText(item.paymentMethod || '')}</b><br>
+                    🆔 Reference: <b>${escapeAdAccessText(item.reference || '')}</b>
+                </div>
                 <div style="display:flex;gap:8px;">
-                    <button class="btn-sm mint" onclick="adminApproveAdAccessRequest('${item.id}')" style="flex:1;">✅ Approve 15 Days</button>
+                    <button class="btn-sm mint" onclick="adminApproveAdAccessRequest('${item.id}')" style="flex:1;">✅ Approve</button>
                     <button class="btn-sm red" onclick="adminRejectAdAccessRequest('${item.id}')" style="flex:1;">❌ Reject</button>
                 </div>
             </div>
@@ -7464,11 +7551,15 @@ async function loadAdminAdAccessRequests() {
     }
 }
 
+
+
 async function adminApproveAdAccessRequest(uid) {
     if (!isAdmin || !auth.currentUser) return;
+
     try {
         const requestRef = db.collection('adAccessRequests').doc(uid);
         const requestSnap = await requestRef.get();
+
         if (!requestSnap.exists || requestSnap.data().status !== 'pending') {
             showToast('Request မရှိတော့ပါ။', 'warning');
             await loadAdminAdAccessRequests();
@@ -7476,20 +7567,57 @@ async function adminApproveAdAccessRequest(uid) {
         }
 
         const request = requestSnap.data();
+
+        const packages = {
+            bronze: { name: 'Bronze', days: 15, amount: 5000 },
+            silver: { name: 'Silver', days: 30, amount: 10000 },
+            gold: { name: 'Gold', days: 60, amount: 20000 },
+            diamond: { name: 'Diamond', days: 90, amount: 30000 }
+        };
+
+        const pkg = packages[request.packageId];
+
+        if (!pkg ||
+            request.packageName !== pkg.name ||
+            Number(request.durationDays) !== pkg.days ||
+            Number(request.amountMMK) !== pkg.amount ||
+            !['WavePay', 'KBZPay'].includes(request.paymentMethod) ||
+            !/^[A-Z0-9]{5}$/.test(String(request.reference || ''))) {
+            showToast('❌ Request Package အချက်အလက် မမှန်ကန်ပါ။', 'error');
+            return;
+        }
+
+        const accessRef = db.collection('adAccess').doc(uid);
+        const accessSnap = await accessRef.get();
+        const oldAccess = accessSnap.exists ? accessSnap.data() : {};
+
+        let oldExpiry = 0;
+        if (oldAccess.expiresAt?.toMillis) {
+            oldExpiry = oldAccess.expiresAt.toMillis();
+        } else if (oldAccess.expiresAt?.toDate) {
+            oldExpiry = oldAccess.expiresAt.toDate().getTime();
+        } else if (oldAccess.expiresAt instanceof Date) {
+            oldExpiry = oldAccess.expiresAt.getTime();
+        }
+
+        const startFrom = Math.max(Date.now(), oldExpiry);
         const expiresAt = firebase.firestore.Timestamp.fromDate(
-            new Date(Date.now() + 15 * 24 * 60 * 60 * 1000)
+            new Date(startFrom + pkg.days * 24 * 60 * 60 * 1000)
         );
 
         const batch = db.batch();
-        batch.set(db.collection('adAccess').doc(uid), {
+
+        batch.set(accessRef, {
             active: true,
             status: 'active',
             email: request.email || '',
             grantedAt: firebase.firestore.FieldValue.serverTimestamp(),
             expiresAt: expiresAt,
             grantedBy: auth.currentUser.uid,
-            durationDays: 15
-        });
+            durationDays: pkg.days,
+            packageId: request.packageId,
+            packageName: pkg.name
+        }, { merge: true });
 
         batch.update(requestRef, {
             status: 'approved',
@@ -7499,13 +7627,15 @@ async function adminApproveAdAccessRequest(uid) {
         });
 
         await batch.commit();
-        showToast('✅ Ads Access 15 ရက် Approve လုပ်ပြီးပါပြီ။', 'success');
+
+        showToast('✅ ' + pkg.name + ' Package ' + pkg.days + ' ရက် Approve လုပ်ပြီးပါပြီ။', 'success');
         await loadAdminAdAccessRequests();
     } catch (e) {
         console.error('APPROVE ACCESS REQUEST FAILED:', e);
         showToast('❌ Approve မအောင်မြင်ပါ: ' + (e.message || e.code), 'error');
     }
 }
+
 
 async function adminRejectAdAccessRequest(uid) {
     if (!isAdmin || !auth.currentUser) return;
@@ -8347,6 +8477,7 @@ async function loadLevelPaymentAccounts(fillAdmin = false) {
         }
     } catch (e) { console.warn('Load level payment accounts:', e); }
     renderLevelPaymentDestination();
+    renderAdAccessPaymentDestination();
 }
 
 async function saveLevelPaymentAccounts() {
@@ -8369,6 +8500,7 @@ async function saveLevelPaymentAccounts() {
             kpayName: data.kpayName, kpayPhone: data.kpayPhone
         };
         renderLevelPaymentDestination();
+        renderAdAccessPaymentDestination();
         if (msg) msg.textContent = '✅ Payment accounts saved.';
         showToast('Payment Receiving Accounts သိမ်းပြီးပါပြီ', 'success');
     } catch (e) {
@@ -8829,12 +8961,19 @@ function renderAdCards() {
                 <div style="font-size:38px;">🔒</div>
                 <div style="font-size:17px;font-weight:800;margin:10px 0;">Ads Access Locked</div>
                 <div style="font-size:13px;opacity:.8;">
-                    Admin အတည်ပြုပြီးမှ Free Ads Access 15 ရက် ရရှိပါမည်။
+                    VIP Package ဝယ်ယူပြီး Admin အတည်ပြုမှ Ads Access ရရှိပါမည်။
                 </div>
                 ${getAdAccessRequestPanelHtml()}
             </div>`;
+        renderAdAccessPaymentDestination();
         return;
     }
+
+    const renewalPanel = document.createElement('div');
+    renewalPanel.style.width = '100%';
+    renewalPanel.innerHTML = getAdAccessRequestPanelHtml();
+    container.appendChild(renewalPanel);
+    renderAdAccessPaymentDestination();
 
     const banner = document.createElement('div');
     banner.id = 'adAccessCountdown';

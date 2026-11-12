@@ -175,11 +175,33 @@ service cloud.firestore {
 
     match /adAccessRequests/{uid} {
       function validPendingAdAccessRequest() {
-        return request.resource.data.userId == request.auth.uid
-          && request.resource.data.status == 'pending'
-          && request.resource.data.keys().hasOnly([
-            'userId', 'email', 'username', 'status', 'requestedAt'
-          ]);
+        let d = request.resource.data;
+
+        return d.userId == request.auth.uid
+          && d.status == 'pending'
+          && d.keys().hasAll([
+            'userId', 'email', 'username', 'packageId', 'packageName',
+            'durationDays', 'amountMMK', 'paymentMethod', 'reference',
+            'status', 'requestedAt'
+          ])
+          && d.keys().hasOnly([
+            'userId', 'email', 'username', 'packageId', 'packageName',
+            'durationDays', 'amountMMK', 'paymentMethod', 'reference',
+            'status', 'requestedAt'
+          ])
+          && (
+            (d.packageId == 'bronze' && d.packageName == 'Bronze'
+              && d.durationDays == 15 && d.amountMMK == 5000)
+            || (d.packageId == 'silver' && d.packageName == 'Silver'
+              && d.durationDays == 30 && d.amountMMK == 10000)
+            || (d.packageId == 'gold' && d.packageName == 'Gold'
+              && d.durationDays == 60 && d.amountMMK == 20000)
+            || (d.packageId == 'diamond' && d.packageName == 'Diamond'
+              && d.durationDays == 90 && d.amountMMK == 30000)
+          )
+          && d.paymentMethod in ['WavePay', 'KBZPay']
+          && d.reference is string
+          && d.reference.matches('^[A-Z0-9]{5}$');
       }
 
       allow get: if isOwner(uid) || isAdmin();
@@ -190,14 +212,7 @@ service cloud.firestore {
 
       allow update: if isAdmin()
         || (isOwner(uid)
-          && (
-            resource.data.status == 'rejected'
-            || (
-              resource.data.status == 'approved'
-              && resource.data.expiresAt is timestamp
-              && resource.data.expiresAt < request.time
-            )
-          )
+          && resource.data.status in ['rejected', 'approved']
           && validPendingAdAccessRequest());
 
       allow delete: if isAdmin();
