@@ -11470,10 +11470,90 @@ async function broadcastAdminNotification() {
             status.textContent = 'No registered users found.';
         } else {
             status.textContent =
-                '✅ Broadcast completed! Sent to ' +
-                sentCount + ' users in ' + batchNumber + ' batches.';
+                'In-app notifications sent to ' + sentCount +
+                ' users. Starting push notifications...';
 
-            showToast('Broadcast sent to ' + sentCount + ' users');
+            showToast('In-app notification sent to ' + sentCount + ' users');
+
+            // FCM PUSH BROADCAST
+            const PUSH_WORKER_URL =
+                'https://cashtube-push-worker.zuzu168372.workers.dev/';
+
+            let pushPageToken = null;
+            let pushSent = 0;
+            let pushFailed = 0;
+            let pushNoTokens = 0;
+            let pushUsersProcessed = 0;
+            let pushRequests = 0;
+
+            try {
+                do {
+                    pushRequests++;
+
+                    if (pushRequests > 1000) {
+                        throw new Error('Push request safety limit reached.');
+                    }
+
+                    const idToken = await auth.currentUser.getIdToken();
+
+                    const pushResponse = await fetch(PUSH_WORKER_URL, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': 'Bearer ' + idToken
+                        },
+                        body: JSON.stringify({
+                            title: title,
+                            message: message,
+                            pageToken: pushPageToken
+                        })
+                    });
+
+                    const pushData = await pushResponse.json();
+
+                    if (!pushResponse.ok || !pushData.success) {
+                        throw new Error(
+                            pushData.error || 'Push Worker request failed.'
+                        );
+                    }
+
+                    pushSent += Number(pushData.sent || 0);
+                    pushFailed += Number(pushData.failed || 0);
+                    pushNoTokens += Number(pushData.noTokens || 0);
+                    pushUsersProcessed += Number(pushData.usersProcessed || 0);
+
+                    pushPageToken = pushData.nextPageToken || null;
+
+                    status.textContent =
+                        'Push progress: ' + pushUsersProcessed +
+                        ' users checked, ' + pushSent +
+                        ' devices sent, ' + pushFailed + ' failed.';
+
+                    if (pushData.completed === false && !pushPageToken) {
+                        throw new Error('Worker did not return the next page token.');
+                    }
+
+                } while (pushPageToken);
+
+                status.textContent =
+                    '✅ Broadcast completed! In-app: ' + sentCount +
+                    ' users. Push: ' + pushSent +
+                    ' sent, ' + pushFailed + ' failed. ' +
+                    pushNoTokens + ' users had no registered tokens.';
+
+                showToast('In-app and Push broadcast completed');
+
+            } catch (pushError) {
+                console.error('FCM PUSH BROADCAST ERROR:', pushError);
+
+                status.textContent =
+                    '⚠️ In-app sent to ' + sentCount +
+                    ' users. Push stopped: ' +
+                    (pushError.message || 'Unknown error') +
+                    '. Push sent before error: ' + pushSent;
+
+                showToast('In-app sent; Push needs checking.', 'error');
+            }
         }
 
     } catch (error) {
