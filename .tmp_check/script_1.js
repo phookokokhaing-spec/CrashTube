@@ -4066,6 +4066,32 @@ function selectAdminNotificationUser(index) {
     document.getElementById('adminNotificationMsg').textContent = '';
 }
 
+
+async function createAutomaticUserNotification(uid, title, message) {
+    try {
+        if (!isAdmin || !auth.currentUser || !uid) {
+            console.warn('Automatic notification skipped: Admin or UID missing');
+            return false;
+        }
+
+        await db.collection('notifications')
+            .doc(String(uid))
+            .collection('items')
+            .add({
+                title: String(title).slice(0, 80),
+                message: String(message).slice(0, 500),
+                read: false,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                createdBy: auth.currentUser.uid
+            });
+
+        return true;
+    } catch (e) {
+        console.error('Automatic notification failed:', e);
+        return false;
+    }
+}
+
 async function sendAdminNotification() {
     const uidInput = document.getElementById('adminNotificationUid');
     const titleInput = document.getElementById('adminNotificationTitle');
@@ -5037,17 +5063,21 @@ async function loadPaidLevelRequests() {
     }
 }
 
+
 async function processPaidLevelRequest(id, status) {
     if (!isAdmin || !auth.currentUser || !['approved', 'rejected'].includes(status)) return;
+
     if (!confirm(status === 'approved'
         ? '5,000 MMK ငွေလွှဲမှုကို စစ်ဆေးပြီး ဒီ Level ကို Approve လုပ်မလား?'
         : 'ဒီ Paid Level Request ကို Reject လုပ်မလား?')) return;
 
     try {
         const reqRef = db.collection('levelUpgradeRequests').doc(id);
-        await db.runTransaction(async tx => {
+
+        const result = await db.runTransaction(async tx => {
             const req = await tx.get(reqRef);
             if (!req.exists) throw new Error('REQUEST_NOT_FOUND');
+
             const d = req.data();
             if (d.status !== 'pending') throw new Error('ALREADY_PROCESSED');
 
@@ -5055,6 +5085,7 @@ async function processPaidLevelRequest(id, status) {
                 const userRef = db.collection('users').doc(d.userId);
                 const userSnap = await tx.get(userRef);
                 if (!userSnap.exists) throw new Error('USER_NOT_FOUND');
+
                 const ud = userSnap.data();
                 const adsLevel = getLevelFromAds(Number(ud.totalAds) || 0);
                 const effectiveLevel = Math.max(Number(ud.level) || 1, adsLevel);
@@ -5062,11 +5093,15 @@ async function processPaidLevelRequest(id, status) {
 
                 if (!Number.isInteger(targetLevel) || targetLevel < 2 || targetLevel > MAX_LEVEL)
                     throw new Error('INVALID_TARGET_LEVEL');
+
                 if (effectiveLevel < 1 || effectiveLevel >= MAX_LEVEL ||
                     Number(d.fromLevel) !== effectiveLevel ||
                     targetLevel !== effectiveLevel + 1)
                     throw new Error('LEVEL_CHANGED');
-                if (Number(d.amountMMK) !== 5000 || !['WavePay', 'KPay'].includes(d.paymentMethod) || !/^\d{5}$/.test(String(d.reference || '')))
+
+                if (Number(d.amountMMK) !== 5000 ||
+                    !['WavePay', 'KPay'].includes(d.paymentMethod) ||
+                    !/^\d{5}$/.test(String(d.reference || '')))
                     throw new Error('INVALID_PAYMENT_DETAILS');
 
                 tx.update(userRef, {
@@ -5081,9 +5116,28 @@ async function processPaidLevelRequest(id, status) {
                 processedAt: firebase.firestore.FieldValue.serverTimestamp(),
                 processedBy: auth.currentUser.uid
             });
+
+            return d;
         });
 
-        showToast(status === 'approved' ? '✅ Paid Level Approved — User Level Updated' : 'Paid Level Request Rejected', 'success');
+        const title = status === 'approved'
+            ? '✅ Level Upgrade Approved'
+            : '❌ Level Upgrade Rejected';
+
+        const message = status === 'approved'
+            ? `သင်၏ Paid Level Upgrade Request (LV${Number(result.fromLevel) || 1} → LV${Number(result.toLevel) || 0}) ကို Admin မှ Approve လုပ်ပြီးပါပြီ။`
+            : `သင်၏ Paid Level Upgrade Request (LV${Number(result.fromLevel) || 1} → LV${Number(result.toLevel) || 0}) ကို Admin မှ Reject လုပ်ထားပါသည်။`;
+
+        const notified = await createAutomaticUserNotification(result.userId, title, message);
+
+        showToast(
+            (status === 'approved'
+                ? '✅ Paid Level Approved — User Level Updated'
+                : 'Paid Level Request Rejected') +
+            (notified ? ' — Notification Sent' : ' — Notification မပို့နိုင်ပါ'),
+            'success'
+        );
+
         await loadPaidLevelRequests();
     } catch (e) {
         console.error('Process paid level request:', e);
@@ -5092,6 +5146,7 @@ async function processPaidLevelRequest(id, status) {
             : e.message === 'ALREADY_PROCESSED'
                 ? 'ဒီ Request ကို အရင်က စီမံပြီးပါပြီ။'
                 : (e.code || e.message);
+
         showToast('မအောင်မြင်ပါ: ' + msg, 'error');
         await loadPaidLevelRequests();
     }
@@ -5131,8 +5186,9 @@ async function loadFreeLevelRequests() {
     }
 }
 
+
 async function processFreeLevelRequest(id, status) {
-    if (!isAdmin || !['approved', 'rejected'].includes(status)) return;
+    if (!isAdmin || !auth.currentUser || !['approved', 'rejected'].includes(status)) return;
 
     const promptText = status === 'approved'
         ? 'ဒီ Free Level Request ကို Approve လုပ်မလား?'
@@ -5143,7 +5199,7 @@ async function processFreeLevelRequest(id, status) {
     try {
         const reqRef = db.collection('freeLevelRequests').doc(id);
 
-        await db.runTransaction(async tx => {
+        const result = await db.runTransaction(async tx => {
             const req = await tx.get(reqRef);
             if (!req.exists) throw new Error('REQUEST_NOT_FOUND');
 
@@ -5160,16 +5216,12 @@ async function processFreeLevelRequest(id, status) {
                 const effectiveLevel = Math.max(Number(ud.level) || 1, adsLevel);
                 const targetLevel = Number(d.toLevel);
 
-                if (!Number.isInteger(targetLevel) || targetLevel < 1 || targetLevel > MAX_AD_LEVEL) {
+                if (!Number.isInteger(targetLevel) || targetLevel < 1 || targetLevel > MAX_AD_LEVEL)
                     throw new Error('INVALID_TARGET_LEVEL');
-                }
 
-                if (targetLevel > effectiveLevel + 1) {
+                if (targetLevel > effectiveLevel + 1)
                     throw new Error('LEVEL_CHANGED');
-                }
 
-                // User က target Level ကို ရောက်ပြီးသားဆိုရင်
-                // Level ကို ထပ်မပြောင်းဘဲ Request ကို Approved လုပ်မည်။
                 if (targetLevel > effectiveLevel) {
                     tx.update(userRef, { level: targetLevel });
                 }
@@ -5178,18 +5230,35 @@ async function processFreeLevelRequest(id, status) {
             tx.update(reqRef, {
                 status,
                 processedAt: firebase.firestore.FieldValue.serverTimestamp(),
-                processedBy: currentUser.uid
+                processedBy: auth.currentUser.uid
             });
+
+            return d;
         });
 
-        showToast(status === 'approved' ? 'Free VIP Level Approved' : 'Request Rejected', 'success');
-        await loadFreeLevelRequests();
+        const title = status === 'approved'
+            ? '✅ Free Level Approved'
+            : '❌ Free Level Rejected';
 
+        const message = status === 'approved'
+            ? `သင်၏ Free Level Request (LV${Number(result.fromLevel) || 1} → LV${Number(result.toLevel) || 1}) ကို Approve လုပ်ပြီးပါပြီ။`
+            : `သင်၏ Free Level Request (LV${Number(result.fromLevel) || 1} → LV${Number(result.toLevel) || 1}) ကို Reject လုပ်ထားပါသည်။`;
+
+        const notified = await createAutomaticUserNotification(result.userId, title, message);
+
+        showToast(
+            (status === 'approved' ? 'Free VIP Level Approved' : 'Request Rejected') +
+            (notified ? ' — Notification Sent' : ' — Notification မပို့နိုင်ပါ'),
+            'success'
+        );
+
+        await loadFreeLevelRequests();
     } catch (e) {
         console.error('Process free level request:', e);
         showToast('မအောင်မြင်ပါ: ' + (e.code || e.message), 'error');
     }
 }
+
 
 async function loadWithdrawRequests() {
     const tbody = document.getElementById('withdrawRequestsBody');
@@ -5220,53 +5289,103 @@ async function loadWithdrawRequests() {
         tbody.innerHTML = '<tr><td colspan="5" class="table-loading">Request list မဖတ်နိုင်ပါ</td></tr>';
     }
 }
+
 async function approveWithdraw(id) {
+    if (!isAdmin || !auth.currentUser) return;
     if (!confirm('ဒီ Withdrawal Request ကို Approved လုပ်မလား?')) return;
+
     try {
         const ref = db.collection('withdrawals').doc(id);
-        const result = await db.runTransaction(async (tx) => {
+
+        const result = await db.runTransaction(async tx => {
             const snap = await tx.get(ref);
             if (!snap.exists) throw new Error('NOT_FOUND');
+
             const d = snap.data();
             if (d.status !== 'pending') throw new Error('ALREADY_PROCESSED');
+
             tx.update(ref, {
                 status: 'approved',
                 processedAt: firebase.firestore.FieldValue.serverTimestamp()
             });
+
             return d;
         });
-        showToast(`✅ ${Number(result.amount || 0).toLocaleString()} MMK Approved`);
+
+        const notified = await createAutomaticUserNotification(
+            result.userId,
+            '✅ Withdrawal Approved',
+            `သင်၏ ${Number(result.amount || 0).toLocaleString()} MMK Withdrawal Request ကို Approve လုပ်ပြီးပါပြီ။`
+        );
+
+        showToast(
+            `✅ ${Number(result.amount || 0).toLocaleString()} MMK Approved` +
+            (notified ? ' — Notification Sent' : ' — Notification မပို့နိုင်ပါ')
+        );
+
         loadWithdrawRequests();
     } catch (e) {
-        showToast(e.message === 'ALREADY_PROCESSED' ? 'Already processed' : '❌ Approve failed', 'error');
+        showToast(
+            e.message === 'ALREADY_PROCESSED' ? 'Already processed' : '❌ Approve failed',
+            'error'
+        );
     }
 }
+
+
+
 async function rejectWithdraw(id) {
+    if (!isAdmin || !auth.currentUser) return;
     if (!confirm('ဒီ Withdrawal Request ကို Reject လုပ်မလား?')) return;
+
     try {
         const ref = db.collection('withdrawals').doc(id);
-        const result = await db.runTransaction(async (tx) => {
+
+        const result = await db.runTransaction(async tx => {
             const snap = await tx.get(ref);
             if (!snap.exists) throw new Error('NOT_FOUND');
+
             const d = snap.data();
             if (d.status !== 'pending') throw new Error('ALREADY_PROCESSED');
+
             const userRef = db.collection('users').doc(d.userId);
             const userSnap = await tx.get(userRef);
             if (!userSnap.exists) throw new Error('USER_NOT_FOUND');
+
             const balance = Math.max(0, Number(userSnap.data().mmkBalance) || 0);
-            tx.update(userRef, { mmkBalance: balance + (Number(d.amount) || 0) });
+
+            tx.update(userRef, {
+                mmkBalance: balance + (Number(d.amount) || 0)
+            });
+
             tx.update(ref, {
                 status: 'rejected',
                 processedAt: firebase.firestore.FieldValue.serverTimestamp()
             });
-            return Number(d.amount) || 0;
+
+            return d;
         });
-        showToast(`↩️ ${result.toLocaleString()} MMK ပြန်အမ်းပြီး Reject လုပ်ပြီးပါပြီ`);
+
+        const notified = await createAutomaticUserNotification(
+            result.userId,
+            '❌ Withdrawal Rejected',
+            `သင်၏ ${Number(result.amount || 0).toLocaleString()} MMK Withdrawal Request ကို Reject လုပ်ပြီး ငွေပြန်အမ်းပေးထားပါသည်။`
+        );
+
+        showToast(
+            `↩️ ${Number(result.amount || 0).toLocaleString()} MMK ပြန်အမ်းပြီး Reject လုပ်ပြီးပါပြီ` +
+            (notified ? ' — Notification Sent' : ' — Notification မပို့နိုင်ပါ')
+        );
+
         loadWithdrawRequests();
     } catch (e) {
-        showToast(e.message === 'ALREADY_PROCESSED' ? 'Already processed' : '❌ Reject failed', 'error');
+        showToast(
+            e.message === 'ALREADY_PROCESSED' ? 'Already processed' : '❌ Reject failed',
+            'error'
+        );
     }
 }
+
 
 // ============================================================
 //  UTILITIES

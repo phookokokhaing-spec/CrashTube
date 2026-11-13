@@ -16,9 +16,9 @@ messaging.setBackgroundMessageHandler(function(payload) {
   const title = (payload.notification && payload.notification.title) || 'CashTube';
   const options = {
     body: (payload.notification && payload.notification.body) || 'CashTube မှ အသိပေးချက်အသစ် ရှိပါတယ်။',
-    icon: '/favicon.ico',
+    icon: new URL('favicon.ico', self.location.href).href,
     data: {
-      url: (payload.data && payload.data.url) || '/'
+      url: (payload.data && payload.data.url) || './'
     }
   };
 
@@ -29,8 +29,8 @@ self.addEventListener('notificationclick', (event) => {
   event.notification.close();
 
   const targetUrl = new URL(
-    event.notification.data?.url || '/',
-    self.location.origin
+    event.notification.data?.url || './',
+    self.registration.scope
   ).href;
 
   event.waitUntil(

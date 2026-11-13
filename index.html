@@ -14530,6 +14530,51 @@ window.enablePushNotifications = async function () {
         );
 
         const messaging = firebase.messaging();
+
+        // FOREGROUND PUSH: show Android notification while CashTube is open.
+        if (!window.__cashTubeForegroundPushBound) {
+            window.__cashTubeForegroundPushBound = true;
+
+            messaging.onMessage(async function(payload) {
+                try {
+                    const notification = payload.notification || {};
+                    const data = payload.data || {};
+
+                    const title =
+                        notification.title || data.title || 'CashTube';
+
+                    const body =
+                        notification.body ||
+                        data.message ||
+                        data.body ||
+                        'CashTube မှ အသိပေးချက်အသစ် ရှိပါတယ်။';
+
+                    const activeRegistration =
+                        await navigator.serviceWorker.getRegistration(
+                            appBase.pathname
+                        ) || registration;
+
+                    if (
+                        Notification.permission === 'granted' &&
+                        activeRegistration
+                    ) {
+                        await activeRegistration.showNotification(title, {
+                            body: body,
+                            icon: new URL('favicon.ico', appBase).href,
+                            data: {
+                                url: data.url || './'
+                            }
+                        });
+                    }
+                } catch (error) {
+                    console.error(
+                        'CASHTUBE FOREGROUND PUSH ERROR:',
+                        error
+                    );
+                }
+            });
+        }
+
         const token = await messaging.getToken({
             vapidKey: 'BLnmW_udUd--yYnkWRegSuy3DxSN9xHwGYNcjQVcaAJj6Ssi9pMisJmAJR_52OAlMUXoFpsuJhKpZ9SrFIFXuOU',
             serviceWorkerRegistration: registration
