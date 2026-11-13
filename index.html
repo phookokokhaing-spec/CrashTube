@@ -7195,6 +7195,23 @@ background: linear-gradient(
                     </button>
                     <div id="adminNotificationMsg"
                         class="admin-hint" style="margin-top:8px;"></div>
+
+                    <div style="margin-top:18px;padding:14px;border:1px solid var(--border,#444);border-radius:12px;">
+                        <div style="font-weight:800;margin-bottom:6px;">
+                            <i class="fas fa-bullhorn"></i> Broadcast to All Users
+                        </div>
+                        <div class="admin-hint" style="margin-bottom:10px;">
+                            Send the title and message above to every registered user.
+                        </div>
+                        <button type="button" class="btn-primary"
+                            id="adminBroadcastNotificationBtn"
+                            onclick="broadcastAdminNotification()"
+                            style="width:100%;background:linear-gradient(135deg,#b8860b,#f0c75e);color:#111;">
+                            <i class="fas fa-bullhorn"></i> Send to All Users
+                        </button>
+                        <div id="adminBroadcastNotificationStatus"
+                            class="admin-hint" style="margin-top:10px;"></div>
+                    </div>
                 </div>
 
                 <button class="btn-primary btn-outline" onclick="adminLogout()"><i class="fas fa-sign-out-alt"></i> Logout</button>
@@ -11327,6 +11344,122 @@ async function sendAdminNotification() {
         console.error('SEND NOTIFICATION ERROR:', error);
         status.textContent = 'Failed to send: ' + (error.message || 'Permission denied');
         showToast('Could not send notification', 'error');
+    } finally {
+        button.disabled = false;
+    }
+}
+
+
+// ============================================================
+// ADMIN BROADCAST NOTIFICATION — PAGINATED BATCH SENDING
+// ============================================================
+async function broadcastAdminNotification() {
+    const titleInput = document.getElementById('adminNotificationTitle');
+    const messageInput = document.getElementById('adminNotificationMessage');
+    const status = document.getElementById('adminBroadcastNotificationStatus');
+    const button = document.getElementById('adminBroadcastNotificationBtn');
+
+    const title = titleInput.value.trim();
+    const message = messageInput.value.trim();
+
+    if (!isAdmin || !currentUser || !auth.currentUser) {
+        status.textContent = 'Admin login required.';
+        return;
+    }
+
+    if (!title || !message) {
+        status.textContent = 'Please enter notification title and message first.';
+        return;
+    }
+
+    if (title.length > 80 || message.length > 500) {
+        status.textContent = 'Title or message is too long.';
+        return;
+    }
+
+    const confirmed = confirm(
+        'သေချာပါသလား?\n\n' +
+        'ဒီ Notification ကို Registered Users အားလုံးဆီ ပို့ပါမယ်။\n' +
+        'ပို့ပြီးသား Notification တွေကို ပြန်ဖျက်လို့မရနိုင်ပါ။'
+    );
+
+    if (!confirmed) return;
+
+    const PAGE_SIZE = 200;
+    let lastDoc = null;
+    let sentCount = 0;
+    let batchNumber = 0;
+
+    button.disabled = true;
+    status.textContent = 'Preparing broadcast...';
+
+    try {
+        const usersRef = db.collection('users');
+
+        while (true) {
+            let query = usersRef
+                .orderBy(firebase.firestore.FieldPath.documentId())
+                .limit(PAGE_SIZE);
+
+            if (lastDoc) {
+                query = query.startAfter(lastDoc);
+            }
+
+            const snapshot = await query.get();
+
+            if (snapshot.empty) break;
+
+            const batch = db.batch();
+
+            snapshot.docs.forEach(userDoc => {
+                const notificationRef = db.collection('notifications')
+                    .doc(userDoc.id)
+                    .collection('items')
+                    .doc();
+
+                batch.set(notificationRef, {
+                    title: title,
+                    message: message,
+                    read: false,
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    createdBy: auth.currentUser.uid
+                });
+            });
+
+            await batch.commit();
+
+            sentCount += snapshot.size;
+            batchNumber++;
+
+            status.textContent =
+                'Sending... ' + sentCount +
+                ' users completed (Batch ' + batchNumber + ').';
+
+            lastDoc = snapshot.docs[snapshot.docs.length - 1];
+
+            if (snapshot.size < PAGE_SIZE) break;
+        }
+
+        if (sentCount === 0) {
+            status.textContent = 'No registered users found.';
+        } else {
+            status.textContent =
+                '✅ Broadcast completed! Sent to ' +
+                sentCount + ' users in ' + batchNumber + ' batches.';
+
+            showToast('Broadcast sent to ' + sentCount + ' users');
+        }
+
+    } catch (error) {
+        console.error('BROADCAST NOTIFICATION ERROR:', error);
+
+        status.textContent =
+            '⚠️ Stopped after ' + sentCount +
+            ' successful sends. Error: ' +
+            (error.message || 'Permission denied');
+
+        showToast('Broadcast stopped. Check status.', 'error');
+
     } finally {
         button.disabled = false;
     }
