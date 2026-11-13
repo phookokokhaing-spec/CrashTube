@@ -14603,6 +14603,12 @@ window.enablePushNotifications = async function () {
 
         localStorage.setItem('cashtube_push_enabled_' + user.uid, 'true');
         say('✅ Push Notification ဖွင့်ပြီးပါပြီ။');
+
+        // TEMPORARY LOCAL NOTIFICATION TEST (this device only)
+        await registration.showNotification('CashTube စမ်းသပ်ချက်', {
+            body: 'ဖုန်း Notification Bar မှာ ဒီစာပေါ်ရပါမယ်။',
+            data: { url: './' }
+        });
     } catch (error) {
         console.error('CASHTUBE PUSH ERROR:', error);
         say('ချိတ်ဆက်မှု မအောင်မြင်ပါ။ ' + (error.message || 'ပြန်စမ်းပါ။'));
