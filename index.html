@@ -5816,34 +5816,65 @@ background: linear-gradient(
 <style id="dangerZoneStyles">
 #dangerZonePanel {
     display: none;
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
     margin: 12px;
     padding: 17px;
-    border: 2px solid #ef4444;
+    border: 0;
     border-radius: 18px;
     color: #fff;
-    background: linear-gradient(135deg,#450a0a,#991b1b,#450a0a);
-    box-shadow: 0 8px 28px rgba(239,68,68,.3);
-    position: relative;
+    background: linear-gradient(135deg, #160707, #3b0808, #160707);
+    box-shadow: 0 0 14px rgba(255,30,30,.35),
+                0 8px 28px rgba(239,68,68,.25);
     z-index: 20;
 }
+#dangerZonePanel::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    padding: 2px;
+    border-radius: inherit;
+    background: conic-gradient(from 0deg,
+        #ff2020, #ff8a00, #fff000, #ff3b00, #ff2020);
+    animation: dangerZoneEmergency 2.5s linear infinite;
+    pointer-events: none;
+    z-index: 0;
+    -webkit-mask: linear-gradient(#fff 0 0) content-box,
+                  linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+}
+#dangerZonePanel::after {
+    content: "";
+    position: absolute;
+    inset: 2px;
+    border-radius: 16px;
+    background: linear-gradient(135deg,#160707,#3b0808,#160707);
+    z-index: 0;
+    pointer-events: none;
+}
 #dangerZonePanel .dz-inner {
+    position: relative;
+    z-index: 1;
     display: flex;
     align-items: flex-start;
     gap: 13px;
 }
-#dangerZonePanel .dz-icon {
-    font-size: 32px;
-}
+#dangerZonePanel .dz-icon { font-size: 32px; }
 #dangerZonePanel .dz-title {
-    color: #fecaca;
+    color: #ff6565;
     font-size: 12px;
     font-weight: 900;
     letter-spacing: 2px;
+    text-shadow: 0 0 10px rgba(255,50,50,.8);
 }
 #dangerZonePanel .dz-subtitle {
     margin-top: 4px;
+    color: #fff;
     font-size: 19px;
     font-weight: 1000;
+    text-shadow: 0 0 12px rgba(255,40,40,.5);
 }
 #dangerZonePanel p {
     margin: 8px 0 0;
@@ -5851,8 +5882,14 @@ background: linear-gradient(
     line-height: 1.6;
 }
 #dangerZonePanel .dz-note {
-    color: #fecaca;
+    color: #ffb4a8;
     font-size: 12px;
+}
+@keyframes dangerZoneEmergency {
+    to { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+    #dangerZonePanel::before { animation: none; }
 }
 </style>
 
@@ -6174,11 +6211,10 @@ background: linear-gradient(
                 <div class="dz-content">
                     <div class="dz-title">DANGER ZONE</div>
                     <div class="dz-subtitle">ACCOUNT RESTRICTED</div>
-                    <p>သင့်အကောင့်ကို Admin မှ ယာယီကန့်သတ်ထားပါသည်။</p>
+                    <p>Your account has been temporarily restricted by the system.</p>
                     <p class="dz-note">
-                        Reward၊ Exchange နှင့် Withdrawal လုပ်ဆောင်ချက်များ
-                        ယာယီပိတ်ထားပါသည်။ Admin မှ ပြန်လည်ခွင့်ပြုပြီးမှ
-                        ပုံမှန်အသုံးပြုနိုင်ပါမည်။
+                        Reward claims, exchanges, and withdrawals are temporarily unavailable.
+                        Access will be restored once the system removes the restriction.
                     </p>
                 </div>
             </div>
