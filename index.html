@@ -5891,6 +5891,37 @@ background: linear-gradient(
 @media (prefers-reduced-motion: reduce) {
     #dangerZonePanel::before { animation: none; }
 }
+
+/* Prevent Danger Zone card from shrinking inside app flex layout */
+#appContainer > #dangerZonePanel {
+    display: none;
+    flex: 0 0 auto !important;
+    width: auto;
+    height: auto !important;
+    min-height: 140px !important;
+    max-height: none !important;
+    box-sizing: border-box !important;
+    overflow: hidden !important;
+}
+
+#dangerZonePanel .dz-inner {
+    width: 100%;
+    min-height: 104px;
+    align-items: flex-start;
+    box-sizing: border-box;
+}
+
+#dangerZonePanel .dz-content {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+#dangerZonePanel .dz-note {
+    display: block;
+    white-space: normal;
+}
+
 </style>
 
 </head>
