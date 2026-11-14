@@ -11,6 +11,12 @@ service cloud.firestore {
       return signedIn() && request.auth.uid == uid;
     }
 
+    function isActiveUser(uid) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/users/$(uid))
+        && get(/databases/$(database)/documents/users/$(uid)).data.get('isBanned', false) != true;
+    }
+
     function isAdmin() {
       return signedIn()
         && exists(/databases/$(database)/documents/admins/$(request.auth.uid))
@@ -37,19 +43,21 @@ service cloud.firestore {
     }
 
     match /users/{uid} {
-      allow create: if isOwner(uid);
+      allow create: if isOwner(uid)
+        && request.resource.data.get('isBanned', false) != true;
       allow get: if isOwner(uid) || isAdmin();
       allow list: if isAdmin();
-      // Users may update their normal profile/wallet fields, but cannot
-      // self-assign a VIP level. Only an Admin may change `level`.
       allow update: if isAdmin()
         || (isOwner(uid)
+          && resource.data.get('isBanned', false) != true
+          && request.resource.data.get('isBanned', false)
+              == resource.data.get('isBanned', false)
           && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['level']));
       allow delete: if isAdmin();
     }
 
     match /transactions/{id} {
-      allow create: if signedIn()
+      allow create: if isActiveUser(request.auth.uid)
         && request.resource.data.userId == request.auth.uid;
       allow read: if isAdmin()
         || (signedIn() && resource.data.userId == request.auth.uid);
@@ -59,7 +67,7 @@ service cloud.firestore {
     match /adWatches/{id} {
       allow read: if isAdmin()
         || (signedIn() && id.matches('^' + request.auth.uid + '.*$'));
-      allow create, update: if signedIn()
+      allow create, update: if isActiveUser(request.auth.uid)
         && id.matches('^' + request.auth.uid + '.*$')
         && hasActiveAdAccess(request.auth.uid);
       allow delete: if isAdmin();
@@ -89,9 +97,9 @@ service cloud.firestore {
       allow get: if isAdmin()
         || (signedIn() && id.matches('^' + request.auth.uid + '_LV[0-9]+$'));
       allow list: if isAdmin();
-      allow create: if signedIn() && validPaidLevelRequest();
+      allow create: if isActiveUser(request.auth.uid) && validPaidLevelRequest();
       allow update: if isAdmin()
-        || (signedIn()
+        || (isActiveUser(request.auth.uid)
           && resource.data.userId == request.auth.uid
           && resource.data.status == 'rejected'
           && validPaidLevelRequest());
@@ -113,16 +121,16 @@ service cloud.firestore {
 
       allow get: if isOwner(uid) || isAdmin();
       allow list: if isAdmin();
-      allow create: if isOwner(uid) && validFreeLevelRequest();
+      allow create: if isOwner(uid) && isActiveUser(uid) && validFreeLevelRequest();
       allow update: if isAdmin()
-        || (isOwner(uid)
+        || (isOwner(uid) && isActiveUser(uid)
           && resource.data.status == 'rejected'
           && validFreeLevelRequest());
       allow delete: if isAdmin();
     }
 
     match /withdrawals/{id} {
-      allow create: if signedIn()
+      allow create: if isActiveUser(request.auth.uid)
         && request.resource.data.userId == request.auth.uid;
       allow read: if isAdmin()
         || (signedIn() && resource.data.userId == request.auth.uid);
@@ -145,7 +153,7 @@ service cloud.firestore {
     match /publicLeaderboard/{id} {
       allow read: if signedIn();
 
-      allow create: if signedIn()
+      allow create: if isActiveUser(request.auth.uid)
         && request.resource.data.userId == request.auth.uid
         && request.resource.data.date is string
         && id == request.auth.uid + '_' + request.resource.data.date
@@ -154,7 +162,7 @@ service cloud.firestore {
           'totalCoins', 'updatedAt'
         ]);
 
-      allow update: if signedIn()
+      allow update: if isActiveUser(request.auth.uid)
         && resource.data.userId == request.auth.uid
         && request.resource.data.userId == request.auth.uid
         && request.resource.data.date == resource.data.date
@@ -209,11 +217,11 @@ service cloud.firestore {
       allow get: if isOwner(uid) || isAdmin();
       allow list: if isAdmin();
 
-      allow create: if isOwner(uid)
+      allow create: if isOwner(uid) && isActiveUser(uid)
         && validPendingAdAccessRequest();
 
       allow update: if isAdmin()
-        || (isOwner(uid)
+        || (isOwner(uid) && isActiveUser(uid)
           && resource.data.status in ['rejected', 'approved']
           && validPendingAdAccessRequest());
 
@@ -222,7 +230,7 @@ service cloud.firestore {
       match /history/{historyId} {
         allow get, list: if isOwner(uid) || isAdmin();
 
-        allow create: if isOwner(uid)
+        allow create: if isOwner(uid) && isActiveUser(uid)
           && validPendingAdAccessRequest()
           && request.resource.data.historyId == historyId
           && getAfter(

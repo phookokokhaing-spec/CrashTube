@@ -1,0 +1,7163 @@
+
+
+/* ============================================================
+   CASH TUBE CORE CONFIG — SAFE INITIALIZATION ORDER
+   ============================================================ */
+const PROFILE_FRAMES = [
+    {id:'aurora', name:'Aurora', cls:'frame-aurora', price:300, icon:'🌌'},
+    {id:'royal', name:'Royal', cls:'frame-royal', price:300, icon:'👑'},
+    {id:'rose', name:'Rose Glow', cls:'frame-rose', price:300, icon:'🌹'},
+    {id:'neon', name:'Neon', cls:'frame-neon', price:300, icon:'⚡'},
+    {id:'ocean', name:'Ocean', cls:'frame-ocean', price:300, icon:'🌊'},
+    {id:'gold', name:'Gold', cls:'frame-gold', price:300, icon:'✨'},
+    {id:'diamond', name:'Diamond', cls:'frame-diamond', price:300, icon:'💎'},
+    {id:'cosmic', name:'Cosmic', cls:'frame-cosmic', price:300, icon:'🪐'}
+];
+
+var VIDEO_REWARD = 0;
+
+// ============================================================
+//  SIDE DRAWER FUNCTIONS
+// ============================================================
+function openDrawer() {
+    document.getElementById('sideDrawer').classList.add('show');
+    document.getElementById('drawerOverlay').classList.add('show');
+}
+
+function closeDrawer() {
+    document.getElementById('sideDrawer').classList.remove('show');
+    document.getElementById('drawerOverlay').classList.remove('show');
+}
+
+// ============================================================
+//  FIREBASE SETUP
+// ============================================================
+const firebaseConfig = {
+  apiKey: "AIzaSyDi3BZwW1Bj9q-l5aifdetKGrIpIZXw79I",
+  authDomain: "cashtube-1679a.firebaseapp.com",
+  projectId: "cashtube-1679a",
+  storageBucket: "cashtube-1679a.firebasestorage.app",
+  messagingSenderId: "453269438044",
+  appId: "1:453269438044:web:6290085ed840a19d677099",
+  measurementId: "G-Q3W8SVWL0L"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+const auth = firebase.auth();
+db.enablePersistence({ synchronizeTabs: true }).catch(() => {});
+
+// ============================================================
+//  CONSTANTS
+// ============================================================
+let AD_REWARD = 0;
+const DAILY_AD_TARGET = 300;
+const LEVEL_PURCHASE_PRICE_MMK = 5000;
+let dailyAdsToday = 0;
+const AD_DURATION = 20;
+const COOLDOWN = 2 * 60 * 1000;
+const TOP_BONUS = 1500;
+const TOP_BONUS_TARGET = 50;
+const ADMIN_IDS = ["2021666", "7625227853"];
+const GIFT_FEE = 20;
+const REFERRAL_BONUS = 500;
+const ADMIN_REF_CODE = "ADMIN2026";
+const ADMIN_SIGNUP_REF_CODE = "5CDUKGUB";
+const MIN_WITHDRAW_MMK = 1000;
+
+// FIRESTORE QUOTA OPTIMIZATION
+// Ad rewards are queued locally and synced in small batches instead of
+// writing to Firestore on every single ad view.
+const AD_SYNC_BATCH = 5;
+let _adRewardFlushPromise = null;
+function getPendingAdRewards() {
+    if (!currentUser) return { count: 0, coins: 0, lastTitle: '' };
+    try {
+        return JSON.parse(localStorage.getItem('pendingAdRewards_' + currentUser.uid) || '{"count":0,"coins":0,"lastTitle":""}');
+    } catch (e) { return { count: 0, coins: 0, lastTitle: '' }; }
+}
+function setPendingAdRewards(p) {
+    if (!currentUser) return;
+
+    const previous = getPendingAdRewards();
+
+    // Existing pending ads may already be counted on the old leaderboard.
+    // Remember the old values to prevent counting them twice.
+    if (Number(p.count || 0) <= 0) {
+        p.leaderboardSyncedCount = 0;
+        p.leaderboardSyncedCoins = 0;
+    } else {
+        if (p.leaderboardSyncedCount == null) {
+            p.leaderboardSyncedCount = Number(
+                previous.leaderboardSyncedCount ?? previous.count ?? 0
+            );
+        }
+        if (p.leaderboardSyncedCoins == null) {
+            p.leaderboardSyncedCoins = Number(
+                previous.leaderboardSyncedCoins ?? previous.coins ?? 0
+            );
+        }
+    }
+
+    // Local queue only. Firestore writes happen in the batch sync.
+    localStorage.setItem(
+        'pendingAdRewards_' + currentUser.uid,
+        JSON.stringify(p)
+    );
+}
+
+
+function getAdAccessExpiryMillis() {
+    const value = adAccessData && adAccessData.expiresAt;
+    if (!value) return 0;
+    if (typeof value.toMillis === 'function') return value.toMillis();
+    if (typeof value.toDate === 'function') return value.toDate().getTime();
+    return 0;
+}
+
+function hasActiveAdAccess() {
+    return !!(
+        adAccessLoaded &&
+        adAccessData &&
+        adAccessData.active === true &&
+        getAdAccessExpiryMillis() > Date.now()
+    );
+}
+
+function updateAdAccessCountdownText() {
+    const el = document.getElementById('adAccessCountdown');
+    if (!el) return;
+
+    if (!hasActiveAdAccess()) {
+        el.textContent = '🔒 Ads Access သက်တမ်းကုန်ဆုံးသွားပါပြီ';
+        return;
+    }
+
+    const remaining = Math.max(0, getAdAccessExpiryMillis() - Date.now());
+    const days = Math.floor(remaining / 86400000);
+    const hours = Math.floor((remaining % 86400000) / 3600000);
+    const minutes = Math.floor((remaining % 3600000) / 60000);
+    const seconds = Math.floor((remaining % 60000) / 1000);
+
+    el.textContent =
+        `🎁 Free Ads Access ကျန်ချိန်: ${days} ရက် ${hours} နာရီ ${minutes} မိနစ် ${seconds} စက္ကန့်`;
+}
+
+
+function escapePurchaseText(value) {
+    return String(value ?? '').replace(/[&<>"']/g, ch => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+    })[ch]);
+}
+
+function formatPurchaseDate(value) {
+    if (!value) return '—';
+
+    const date = value.toDate
+        ? value.toDate()
+        : new Date(value);
+
+    if (Number.isNaN(date.getTime())) return '—';
+
+    return date.toLocaleString('en-GB', {
+        timeZone: 'Asia/Yangon',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+}
+
+
+function getPurchaseCenterHtml() {
+    const data = adAccessData || {};
+    const active = hasActiveAdAccess();
+    const expiry = data.expiresAt
+        ? formatPurchaseDate(data.expiresAt)
+        : '—';
+
+    const amount = data.amountMMK
+        ? Number(data.amountMMK).toLocaleString('en-US') + ' MMK'
+        : '—';
+
+    const packageName = escapePurchaseText(data.packageName || 'မဝယ်ယူရသေးပါ');
+    const payment = escapePurchaseText(data.paymentMethod || '—');
+
+    return `
+        <style>
+        #purchaseCenter {
+            width:100%;
+            margin:16px 0;
+            padding:16px;
+            box-sizing:border-box;
+            border-radius:20px;
+            background:linear-gradient(145deg,rgba(35,31,65,.96),rgba(15,18,39,.96));
+            border:1px solid rgba(155,120,255,.35);
+            box-shadow:0 8px 28px rgba(0,0,0,.28),0 0 18px rgba(111,75,255,.10);
+            text-align:left;
+            position:relative;
+            overflow:hidden;
+        }
+        #purchaseCenter:before {
+            content:"";
+            position:absolute;
+            top:0;left:0;right:0;
+            height:3px;
+            background:linear-gradient(90deg,#8b5cf6,#22d3ee,#ec4899);
+        }
+        #purchaseCenter .pc-heading {
+            display:flex;
+            align-items:center;
+            gap:10px;
+            margin-bottom:16px;
+            font-size:18px;
+            font-weight:900;
+            color:#fff;
+        }
+        #purchaseCenter .pc-heading-icon {
+            width:42px;height:42px;
+            display:flex;align-items:center;justify-content:center;
+            border-radius:13px;
+            background:linear-gradient(135deg,#7545e8,#287de8);
+            box-shadow:0 4px 14px rgba(115,75,255,.35);
+            font-size:21px;
+        }
+        #purchaseCenter .pc-package {
+            display:flex;
+            align-items:center;
+            justify-content:space-between;
+            gap:8px;
+            padding:13px;
+            margin-bottom:12px;
+            border-radius:14px;
+            background:linear-gradient(110deg,rgba(124,78,255,.20),rgba(34,211,238,.08));
+            border:1px solid rgba(167,139,250,.25);
+        }
+        #purchaseCenter .pc-package-label {
+            font-size:11px;
+            color:#b9b5d6;
+            margin-bottom:4px;
+        }
+        #purchaseCenter .pc-package-name {
+            font-size:19px;
+            font-weight:900;
+            color:#fff;
+        }
+        #purchaseCenter .pc-package-badge {
+            padding:7px 11px;
+            border-radius:20px;
+            background:rgba(139,92,246,.22);
+            border:1px solid rgba(196,181,253,.4);
+            color:#d8c9ff;
+            font-size:11px;
+            font-weight:800;
+        }
+        #purchaseCenter .pc-amount {
+            font-size:19px;
+            font-weight:900;
+            color:#67e8f9;
+        }
+        #purchaseCenter .pc-info-grid {
+            display:grid;
+            grid-template-columns:1fr 1fr;
+            gap:9px;
+        }
+        #purchaseCenter .pc-info {
+            min-width:0;
+            padding:11px;
+            border-radius:12px;
+            background:rgba(255,255,255,.055);
+            border:1px solid rgba(255,255,255,.08);
+        }
+        #purchaseCenter .pc-info-label {
+            font-size:11px;
+            color:#aaa8c5;
+            margin-bottom:6px;
+        }
+        #purchaseCenter .pc-info-value {
+            font-size:13px;
+            font-weight:800;
+            color:#f5f3ff;
+            line-height:1.5;
+            overflow-wrap:anywhere;
+        }
+        #purchaseCenter .pc-status {
+            display:inline-flex;
+            align-items:center;
+            gap:6px;
+            padding:7px 12px;
+            margin-top:13px;
+            border-radius:20px;
+            background:rgba(34,197,94,.13);
+            border:1px solid rgba(74,222,128,.3);
+            color:#86efac;
+            font-size:12px;
+            font-weight:900;
+        }
+        #purchaseCenter .pc-status.inactive {
+            background:rgba(248,113,113,.12);
+            border-color:rgba(248,113,113,.3);
+            color:#fca5a5;
+        }
+        #purchaseCenter .pc-history-btn {
+            width:100%;
+            margin-top:15px;
+            padding:13px;
+            border:1px solid rgba(196,181,253,.3);
+            border-radius:13px;
+            background:linear-gradient(110deg,#7545e8,#3869e9);
+            color:#fff;
+            font-size:14px;
+            font-weight:900;
+            box-shadow:0 5px 16px rgba(89,75,220,.28);
+        }
+        #purchaseCenter .pc-history-title {
+            display:flex;
+            align-items:center;
+            gap:8px;
+            margin:16px 0 10px;
+            padding-top:13px;
+            border-top:1px solid rgba(255,255,255,.10);
+            color:#e9ddff;
+            font-size:14px;
+            font-weight:900;
+        }
+        #purchaseHistoryPanel {
+            display:none;
+            margin-top:12px;
+            font-size:13px;
+        }
+        #purchaseHistoryPanel .pc-history-item {
+            padding:13px;
+            margin-bottom:10px;
+            border-radius:14px;
+            background:linear-gradient(135deg,rgba(255,255,255,.075),rgba(255,255,255,.025));
+            border:1px solid rgba(167,139,250,.18);
+        }
+        #purchaseHistoryPanel .pc-history-top {
+            display:flex;
+            justify-content:space-between;
+            align-items:center;
+            flex-wrap:wrap;
+            gap:8px;
+            margin-bottom:10px;
+        }
+        #purchaseHistoryPanel .pc-history-package {
+            color:#fff;
+            font-size:15px;
+            font-weight:900;
+        }
+        #purchaseHistoryPanel .pc-history-status {
+            padding:5px 9px;
+            border-radius:20px;
+            font-size:10px;
+            font-weight:900;
+            background:rgba(250,204,21,.13);
+            color:#fde68a;
+            border:1px solid rgba(250,204,21,.25);
+        }
+        #purchaseHistoryPanel .pc-history-status.approved {
+            background:rgba(34,197,94,.13);
+            color:#86efac;
+            border-color:rgba(74,222,128,.25);
+        }
+        #purchaseHistoryPanel .pc-history-status.rejected {
+            background:rgba(248,113,113,.13);
+            color:#fca5a5;
+            border-color:rgba(248,113,113,.25);
+        }
+        #purchaseHistoryPanel .pc-history-details {
+            display:grid;
+            grid-template-columns:1fr 1fr;
+            gap:8px;
+        }
+        #purchaseHistoryPanel .pc-history-detail {
+            color:#bdbbd3;
+            font-size:11px;
+            line-height:1.5;
+        }
+        #purchaseHistoryPanel .pc-history-detail b {
+            display:block;
+            margin-top:3px;
+            color:#f3f0ff;
+            font-size:12px;
+            overflow-wrap:anywhere;
+        }
+        #purchaseHistoryPanel .pc-empty {
+            padding:20px 12px;
+            text-align:center;
+            color:#aaa8c5;
+            border:1px dashed rgba(167,139,250,.3);
+            border-radius:13px;
+        }
+        @media(max-width:360px) {
+            #purchaseCenter .pc-info-grid,
+            #purchaseHistoryPanel .pc-history-details {
+                grid-template-columns:1fr;
+            }
+        }
+        </style>
+
+        <div id="purchaseCenter">
+            <div class="pc-heading">
+                <span class="pc-heading-icon">💎</span>
+                <span>My Purchases</span>
+            </div>
+
+            <div class="pc-package">
+                <div>
+                    <div class="pc-package-label">YOUR VIP PACKAGE</div>
+                    <div class="pc-package-name">${packageName}</div>
+                </div>
+                <span class="pc-package-badge">✦ VIP MEMBER</span>
+            </div>
+
+            <div class="pc-info-grid">
+                <div class="pc-info">
+                    <div class="pc-info-label">💰 PACKAGE AMOUNT</div>
+                    <div class="pc-amount">${amount}</div>
+                </div>
+                <div class="pc-info">
+                    <div class="pc-info-label">💳 PAYMENT METHOD</div>
+                    <div class="pc-info-value">${payment}</div>
+                </div>
+                <div class="pc-info">
+                    <div class="pc-info-label">🛒 PURCHASE DATE</div>
+                    <div class="pc-info-value">${formatPurchaseDate(data.purchaseAt || data.grantedAt)}</div>
+                </div>
+                <div class="pc-info">
+                    <div class="pc-info-label">⏳ EXPIRY DATE</div>
+                    <div class="pc-info-value">${expiry}</div>
+                </div>
+            </div>
+
+            <div class="pc-status ${active ? '' : 'inactive'}">
+                ${active ? '● ACTIVE MEMBERSHIP' : '● EXPIRED / INACTIVE'}
+            </div>
+
+            <button type="button" class="pc-history-btn" onclick="togglePurchaseHistory()">
+                📜 &nbsp; Purchase History ကြည့်ရန်
+            </button>
+
+            <div class="pc-history-title">🏆 PURCHASE RECORDS</div>
+            <div id="purchaseHistoryPanel"></div>
+        </div>`;
+}
+
+async function togglePurchaseHistory() {
+    const panel = document.getElementById('purchaseHistoryPanel');
+    if (!panel || !currentUser) return;
+
+    if (panel.style.display !== 'none') {
+        panel.style.display = 'none';
+        return;
+    }
+
+    panel.style.display = 'block';
+
+    const uid = currentUser.uid;
+
+    if (purchaseHistoryCache && purchaseHistoryUid === uid) {
+        renderPurchaseHistoryItems(panel, purchaseHistoryCache);
+        return;
+    }
+
+    if (purchaseHistoryLoading) return;
+
+    purchaseHistoryLoading = true;
+    panel.innerHTML = '<div style="padding:10px;text-align:center;">မှတ်တမ်းများ ရယူနေပါသည်...</div>';
+
+    try {
+        const snapshot = await db.collection('adAccessRequests')
+            .doc(uid)
+            .collection('history')
+            .orderBy('requestedAt', 'desc')
+            .limit(20)
+            .get();
+
+        if (!currentUser || currentUser.uid !== uid) return;
+
+        purchaseHistoryCache = snapshot.docs.map(doc => doc.data());
+        purchaseHistoryUid = uid;
+
+        renderPurchaseHistoryItems(panel, purchaseHistoryCache);
+    } catch (error) {
+        console.error('PURCHASE HISTORY LOAD FAILED:', error);
+        panel.innerHTML = '<div style="padding:10px;color:#f87171;">မှတ်တမ်း ရယူ၍မရပါ။ Firestore Rules ကို စစ်ဆေးပါ။</div>';
+    } finally {
+        purchaseHistoryLoading = false;
+    }
+}
+
+
+function renderPurchaseHistoryItems(panel, items) {
+    if (!items || !items.length) {
+        panel.innerHTML = `
+            <div class="pc-empty">
+                <div style="font-size:27px;margin-bottom:7px;">📭</div>
+                ဝယ်ယူမှုမှတ်တမ်း မရှိသေးပါ။
+            </div>`;
+        return;
+    }
+
+    const statusText = {
+        pending: '● PENDING',
+        approved: '● APPROVED',
+        rejected: '● REJECTED'
+    };
+
+    panel.innerHTML = items.map(item => {
+        const status = String(item.status || '').toLowerCase();
+        const statusClass = ['approved', 'rejected'].includes(status) ? status : '';
+        const packageName = escapePurchaseText(
+            item.packageName || item.packageId || 'VIP Package'
+        );
+        const payment = escapePurchaseText(item.paymentMethod || '—');
+        const amount = Number(item.amountMMK || 0).toLocaleString('en-US') + ' MMK';
+
+        return `
+            <div class="pc-history-item">
+                <div class="pc-history-top">
+                    <div class="pc-history-package">💎 ${packageName}</div>
+                    <span class="pc-history-status ${statusClass}">
+                        ${statusText[status] || escapePurchaseText(item.status || '—')}
+                    </span>
+                </div>
+                <div class="pc-history-details">
+                    <div class="pc-history-detail">
+                        💰 Amount
+                        <b>${amount}</b>
+                    </div>
+                    <div class="pc-history-detail">
+                        💳 Payment
+                        <b>${payment}</b>
+                    </div>
+                    <div class="pc-history-detail">
+                        📅 Request Date
+                        <b>${formatPurchaseDate(item.requestedAt)}</b>
+                    </div>
+                    <div class="pc-history-detail">
+                        🧾 Reference ID
+                        <b>${escapePurchaseText(item.reference || '—')}</b>
+                    </div>
+                </div>
+            </div>`;
+    }).join('');
+}
+
+function clearAdAccessState() {
+    if (adAccessUnsubscribe) {
+        adAccessUnsubscribe();
+        adAccessUnsubscribe = null;
+    }
+    if (adAccessRequestUnsubscribe) {
+        adAccessRequestUnsubscribe();
+        adAccessRequestUnsubscribe = null;
+    }
+    adAccessRequestData = null;
+
+    // Clear purchase history cache on logout/account switch.
+    purchaseHistoryCache = null;
+    purchaseHistoryUid = null;
+    purchaseHistoryLoading = false;
+
+    if (adAccessCountdownTimer) {
+        clearInterval(adAccessCountdownTimer);
+        adAccessCountdownTimer = null;
+    }
+
+    adAccessData = null;
+    adAccessLoaded = false;
+    adAccessWasActive = false;
+
+    if (isAdPlaying) closeAdPageAndReturn();
+}
+
+
+function loadAdAccessRequest(uid) {
+    if (adAccessRequestUnsubscribe) {
+        adAccessRequestUnsubscribe();
+        adAccessRequestUnsubscribe = null;
+    }
+    adAccessRequestData = null;
+
+    adAccessRequestUnsubscribe = db.collection('adAccessRequests').doc(uid)
+        .onSnapshot(doc => {
+            if (!currentUser || currentUser.uid !== uid) return;
+
+            // Invalidate cached purchase history when request data changes.
+            if (purchaseHistoryUid === uid) {
+                purchaseHistoryCache = null;
+                purchaseHistoryUid = null;
+
+                const historyPanel = document.getElementById('purchaseHistoryPanel');
+                if (historyPanel) {
+                    historyPanel.style.display = 'none';
+                }
+            }
+
+            adAccessRequestData = doc.exists ? doc.data() : null;
+            renderAdCards();
+        }, error => {
+            console.error('AD ACCESS REQUEST LOAD FAILED:', error);
+        });
+}
+
+
+
+function renderAdAccessPaymentDestination() {
+    const box = document.getElementById('adAccessPaymentDestination');
+    if (!box) return;
+
+    const method = document.getElementById('adAccessMethod')?.value || 'WavePay';
+    const packageId = document.getElementById('adAccessPackage')?.value || 'bronze';
+
+    const packages = {
+        bronze: { name: 'Bronze', days: 15, amount: 5000 },
+        silver: { name: 'Silver', days: 30, amount: 10000 },
+        gold: { name: 'Gold', days: 60, amount: 20000 },
+        diamond: { name: 'Diamond', days: 90, amount: 30000 }
+    };
+
+    const pkg = packages[packageId];
+    const isWave = method === 'WavePay';
+    const name = isWave ? levelPaymentAccounts.waveName : levelPaymentAccounts.kpayName;
+    const phone = isWave ? levelPaymentAccounts.wavePhone : levelPaymentAccounts.kpayPhone;
+
+    const account = name && phone
+        ? `<b>${isWave ? 'WavePay' : 'KBZPay'} ငွေလက်ခံအကောင့်</b><br>
+           အမည်: ${escapeAdAccessText(name)}<br>
+           ဖုန်း / အကောင့်: ${escapeAdAccessText(phone)}`
+        : `<b>${isWave ? 'WavePay' : 'KBZPay'} အကောင့် မသတ်မှတ်ရသေးပါ။</b><br>
+           Admin က Payment Receiving Accounts ကို ဖြည့်ပေးရပါမည်။`;
+
+    box.innerHTML = `
+        <div style="font-weight:800;color:#16a085;margin-bottom:8px;">
+            ${pkg.name} Package — ${pkg.days} ရက်
+        </div>
+        <div style="font-size:17px;font-weight:900;margin-bottom:10px;">
+            ${pkg.amount.toLocaleString('en-US')} MMK
+        </div>
+        ${account}
+        <small style="display:block;margin-top:8px;opacity:.8;">
+            ငွေလွှဲပြီး Reference ID ၅ လုံး ထည့်ပါ။
+        </small>`;
+}
+
+function getAdAccessRequestPanelHtml() {
+    const req = adAccessRequestData || {};
+
+    if (req.status === 'pending') {
+        return `
+            <div style="margin-top:16px;padding:14px;border-radius:12px;background:rgba(245,158,11,.12);color:#f59e0b;font-weight:800;">
+                ⏳ VIP Package Request ကို Admin စစ်ဆေးနေပါသည်။
+            </div>`;
+    }
+
+    let notice = '';
+
+    if (req.status === 'rejected') {
+        notice = `
+            <div style="margin:12px 0;color:#ef7777;font-size:12px;">
+                ❌ ယခင် Request ကို Reject လုပ်ထားပါသည်။ ပြန်လည် Request တင်နိုင်ပါသည်။
+            </div>`;
+    }
+
+    if (req.status === 'approved') {
+        notice = `
+            <div style="margin:12px 0;color:#16a085;font-size:12px;">
+                ✅ ယခင် Package Request အတည်ပြုပြီးပါပြီ။ Package အသစ် ဝယ်ယူနိုင်ပါသည်။
+            </div>`;
+    }
+
+    return `
+        ${notice}
+        <div style="margin-top:16px;padding:14px;border-radius:14px;background:rgba(255,255,255,.06);text-align:left;">
+            <label style="display:block;font-size:13px;font-weight:800;margin-bottom:8px;">
+                💎 VIP Package ရွေးချယ်ပါ
+            </label>
+
+            <select id="adAccessPackage" onchange="renderAdAccessPaymentDestination()"
+                style="width:100%;padding:12px;border-radius:10px;background:#202638;color:white;font-size:14px;">
+                <option value="bronze">Bronze — 15 ရက် — 5,000 MMK</option>
+                <option value="silver">Silver — 30 ရက် — 10,000 MMK</option>
+                <option value="gold">Gold — 60 ရက် — 20,000 MMK</option>
+                <option value="diamond">Diamond — 90 ရက် — 30,000 MMK</option>
+            </select>
+
+            <label style="display:block;font-size:13px;font-weight:800;margin:14px 0 8px;">
+                💳 Payment Method
+            </label>
+
+            <select id="adAccessMethod" onchange="renderAdAccessPaymentDestination()"
+                style="width:100%;padding:12px;border-radius:10px;background:#202638;color:white;font-size:14px;">
+                <option value="WavePay">WavePay</option>
+                <option value="KBZPay">KBZPay</option>
+            </select>
+
+            <div id="adAccessPaymentDestination"
+                style="margin-top:12px;padding:12px;border-radius:10px;background:rgba(22,160,133,.12);font-size:13px;line-height:1.8;">
+            </div>
+
+            <label style="display:block;font-size:13px;font-weight:800;margin:14px 0 8px;">
+                🆔 Payment Reference ID (၅ လုံး)
+            </label>
+
+            <input id="adAccessReferenceId" type="text" maxlength="5" minlength="5"
+                placeholder="ဥပမာ - A12B3" autocomplete="off"
+                style="width:100%;box-sizing:border-box;padding:12px;border-radius:10px;background:#202638;color:white;font-size:15px;text-align:center;letter-spacing:3px;text-transform:uppercase;">
+
+            <button onclick="requestAdAccess()"
+                style="display:block;width:100%;margin-top:14px;padding:13px;border:0;border-radius:12px;background:#16a085;color:white;font-weight:800;font-size:14px;">
+                📩 VIP Package Request
+            </button>
+        </div>`;
+}
+
+
+
+
+async function requestAdAccess() {
+    if (!currentUser) {
+        showToast('Login ဝင်ပြီးမှ Request တင်နိုင်ပါမည်။', 'error');
+        return;
+    }
+
+    const uid = currentUser.uid;
+    const packageId = document.getElementById('adAccessPackage')?.value || '';
+    const method = document.getElementById('adAccessMethod')?.value || '';
+    const referenceId = (document.getElementById('adAccessReferenceId')?.value || '').trim().toUpperCase();
+
+    const packages = {
+        bronze: { name: 'Bronze', days: 15, amount: 5000 },
+        silver: { name: 'Silver', days: 30, amount: 10000 },
+        gold: { name: 'Gold', days: 60, amount: 20000 },
+        diamond: { name: 'Diamond', days: 90, amount: 30000 }
+    };
+
+    const pkg = packages[packageId];
+
+    if (!pkg) {
+        showToast('VIP Package ကို ရွေးချယ်ပါ။', 'error');
+        return;
+    }
+
+    if (!['WavePay', 'KBZPay'].includes(method)) {
+        showToast('Payment Method မှန်ကန်စွာ ရွေးချယ်ပါ။', 'error');
+        return;
+    }
+
+    if (!/^[A-Z0-9]{5}$/.test(referenceId)) {
+        showToast('Reference ID ကို အက္ခရာ/ဂဏန်း ၅ လုံး ထည့်ပါ။', 'error');
+        return;
+    }
+
+    if (adAccessRequestData && adAccessRequestData.status === 'pending') {
+        showToast('Request ကို စစ်ဆေးနေဆဲဖြစ်ပါသည်။', 'warning');
+        return;
+    }
+
+    try {
+        const userSnap = await db.collection('users').doc(uid).get();
+        if (!currentUser || currentUser.uid !== uid) return;
+
+        const profile = userSnap.exists ? userSnap.data() : {};
+        const requestRef = db.collection('adAccessRequests').doc(uid);
+        const historyRef = requestRef.collection('history').doc();
+
+        const requestData = {
+            userId: uid,
+            email: currentUser.email || profile.email || '',
+            username: profile.username || profile.name || currentUser.displayName || 'User',
+            packageId: packageId,
+            packageName: pkg.name,
+            durationDays: pkg.days,
+            amountMMK: pkg.amount,
+            paymentMethod: method,
+            reference: referenceId,
+            status: 'pending',
+            requestedAt: firebase.firestore.FieldValue.serverTimestamp(),
+            historyId: historyRef.id
+        };
+
+        const batch = db.batch();
+        batch.set(requestRef, requestData);
+        batch.set(historyRef, requestData);
+        await batch.commit();
+
+        if (!currentUser || currentUser.uid !== uid) return;
+
+        purchaseHistoryCache = null;
+        purchaseHistoryUid = null;
+        adAccessRequestData = { status: 'pending' };
+        renderAdCards();
+
+        showToast('✅ VIP Package Request တင်ပြီးပါပြီ။', 'success');
+    } catch (e) {
+        console.error('AD ACCESS REQUEST FAILED:', e);
+        showToast('❌ Request မတင်နိုင်ပါ: ' + (e.message || e.code), 'error');
+    }
+}
+
+
+function escapeAdAccessText(value) {
+    return String(value || '').replace(/[&<>"']/g, ch => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;',
+        '"': '&quot;', "'": '&#39;'
+    })[ch]);
+}
+
+
+async function loadAdminAdAccessRequests() {
+    const box = document.getElementById('adminAdAccessRequestsList');
+    if (!box || !isAdmin) return;
+
+    box.innerHTML = '<div style="padding:10px;">Loading requests...</div>';
+
+    try {
+        const snap = await db.collection('adAccessRequests')
+            .where('status', '==', 'pending')
+            .get();
+
+        if (snap.empty) {
+            box.innerHTML = '<div style="padding:12px;font-size:12px;opacity:.7;">Pending Request မရှိသေးပါ။</div>';
+            return;
+        }
+
+        const rows = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        rows.sort((a, b) => {
+            const at = a.requestedAt?.toMillis ? a.requestedAt.toMillis() : 0;
+            const bt = b.requestedAt?.toMillis ? b.requestedAt.toMillis() : 0;
+            return at - bt;
+        });
+
+        box.innerHTML = rows.map(item => `
+            <div style="padding:12px;margin:8px 0;border:1px solid rgba(255,255,255,.14);border-radius:12px;">
+                <div style="font-weight:800;">${escapeAdAccessText(item.username || 'User')}</div>
+                <div style="font-size:12px;opacity:.8;margin:4px 0;">${escapeAdAccessText(item.email || '')}</div>
+                <div style="font-size:13px;line-height:1.8;margin:8px 0;">
+                    💎 Package: <b>${escapeAdAccessText(item.packageName || item.packageId || '')}</b><br>
+                    ⏳ Duration: <b>${Number(item.durationDays || 0)} ရက်</b><br>
+                    💰 Amount: <b>${Number(item.amountMMK || 0).toLocaleString('en-US')} MMK</b><br>
+                    💳 Method: <b>${escapeAdAccessText(item.paymentMethod || '')}</b><br>
+                    🆔 Reference: <b>${escapeAdAccessText(item.reference || '')}</b>
+                </div>
+                <div style="display:flex;gap:8px;">
+                    <button class="btn-sm mint" onclick="adminApproveAdAccessRequest('${item.id}')" style="flex:1;">✅ Approve</button>
+                    <button class="btn-sm red" onclick="adminRejectAdAccessRequest('${item.id}')" style="flex:1;">❌ Reject</button>
+                </div>
+            </div>
+        `).join('');
+    } catch (e) {
+        console.error('LOAD ACCESS REQUESTS FAILED:', e);
+        box.innerHTML = '<div style="color:#ef7777;padding:10px;">Request list load failed: ' + escapeAdAccessText(e.message) + '</div>';
+    }
+}
+
+
+
+async function adminApproveAdAccessRequest(uid) {
+    if (!isAdmin || !auth.currentUser) return;
+
+    try {
+        const requestRef = db.collection('adAccessRequests').doc(uid);
+        const requestSnap = await requestRef.get();
+
+        if (!requestSnap.exists || requestSnap.data().status !== 'pending') {
+            showToast('Request မရှိတော့ပါ။', 'warning');
+            await loadAdminAdAccessRequests();
+            return;
+        }
+
+        const request = requestSnap.data();
+
+        const packages = {
+            bronze: { name: 'Bronze', days: 15, amount: 5000 },
+            silver: { name: 'Silver', days: 30, amount: 10000 },
+            gold: { name: 'Gold', days: 60, amount: 20000 },
+            diamond: { name: 'Diamond', days: 90, amount: 30000 }
+        };
+
+        const pkg = packages[request.packageId];
+
+        if (!pkg ||
+            request.packageName !== pkg.name ||
+            Number(request.durationDays) !== pkg.days ||
+            Number(request.amountMMK) !== pkg.amount ||
+            !['WavePay', 'KBZPay'].includes(request.paymentMethod) ||
+            !/^[A-Z0-9]{5}$/.test(String(request.reference || ''))) {
+            showToast('❌ Request Package အချက်အလက် မမှန်ကန်ပါ။', 'error');
+            return;
+        }
+
+        const accessRef = db.collection('adAccess').doc(uid);
+        const accessSnap = await accessRef.get();
+        const oldAccess = accessSnap.exists ? accessSnap.data() : {};
+
+        let oldExpiry = 0;
+        if (oldAccess.expiresAt?.toMillis) {
+            oldExpiry = oldAccess.expiresAt.toMillis();
+        } else if (oldAccess.expiresAt?.toDate) {
+            oldExpiry = oldAccess.expiresAt.toDate().getTime();
+        } else if (oldAccess.expiresAt instanceof Date) {
+            oldExpiry = oldAccess.expiresAt.getTime();
+        }
+
+        const startFrom = Math.max(Date.now(), oldExpiry);
+        const expiresAt = firebase.firestore.Timestamp.fromDate(
+            new Date(startFrom + pkg.days * 24 * 60 * 60 * 1000)
+        );
+
+        const batch = db.batch();
+
+        batch.set(accessRef, {
+            active: true,
+            status: 'active',
+            email: request.email || '',
+            grantedAt: firebase.firestore.FieldValue.serverTimestamp(),
+            expiresAt: expiresAt,
+            grantedBy: auth.currentUser.uid,
+            durationDays: pkg.days,
+            packageId: request.packageId,
+            packageName: pkg.name,
+            amountMMK: pkg.amount,
+            paymentMethod: request.paymentMethod,
+            reference: request.reference,
+            purchaseAt: request.requestedAt || firebase.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+
+        batch.update(requestRef, {
+            status: 'approved',
+            approvedAt: firebase.firestore.FieldValue.serverTimestamp(),
+            approvedBy: auth.currentUser.uid,
+            expiresAt: expiresAt
+        });
+
+        if (request.historyId) {
+            const historyRef = requestRef.collection('history').doc(request.historyId);
+            batch.update(historyRef, {
+                status: 'approved',
+                approvedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                approvedBy: auth.currentUser.uid,
+                expiresAt: expiresAt
+            });
+        }
+
+        await batch.commit();
+
+        showToast('✅ ' + pkg.name + ' Package ' + pkg.days + ' ရက် Approve လုပ်ပြီးပါပြီ။', 'success');
+        await loadAdminAdAccessRequests();
+    } catch (e) {
+        console.error('APPROVE ACCESS REQUEST FAILED:', e);
+        showToast('❌ Approve မအောင်မြင်ပါ: ' + (e.message || e.code), 'error');
+    }
+}
+
+
+async function adminRejectAdAccessRequest(uid) {
+    if (!isAdmin || !auth.currentUser) return;
+    try {
+        const ref = db.collection('adAccessRequests').doc(uid);
+        const snap = await ref.get();
+        if (!snap.exists || snap.data().status !== 'pending') {
+            showToast('Request မရှိတော့ပါ။', 'warning');
+            await loadAdminAdAccessRequests();
+            return;
+        }
+
+        const request = snap.data();
+        const batch = db.batch();
+
+        batch.update(ref, {
+            status: 'rejected',
+            rejectedAt: firebase.firestore.FieldValue.serverTimestamp(),
+            rejectedBy: auth.currentUser.uid
+        });
+
+        if (request.historyId) {
+            const historyRef = ref.collection('history').doc(request.historyId);
+            batch.update(historyRef, {
+                status: 'rejected',
+                rejectedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                rejectedBy: auth.currentUser.uid
+            });
+        }
+
+        await batch.commit();
+
+        showToast('Request ကို Reject လုပ်ပြီးပါပြီ။', 'success');
+        await loadAdminAdAccessRequests();
+    } catch (e) {
+        console.error('REJECT ACCESS REQUEST FAILED:', e);
+        showToast('❌ Reject မအောင်မြင်ပါ: ' + (e.message || e.code), 'error');
+    }
+}
+
+async function loadAdAccess(uid) {
+    clearAdAccessState();
+    loadAdAccessRequest(uid);
+    renderAdCards();
+
+    return await new Promise(resolve => {
+        let first = true;
+
+        adAccessUnsubscribe = db.collection('adAccess').doc(uid)
+            .onSnapshot(doc => {
+                if (!currentUser || currentUser.uid !== uid) return;
+
+                const wasActive = hasActiveAdAccess();
+                adAccessData = doc.exists ? doc.data() : null;
+                adAccessLoaded = true;
+
+                const active = hasActiveAdAccess();
+
+                if (wasActive && !active && isAdPlaying) {
+                    closeAdPageAndReturn();
+                }
+
+                adAccessWasActive = active;
+                renderAdCards();
+                updateDailyAdsProgressUI();
+
+                if (first) {
+                    first = false;
+                    resolve(true);
+                }
+            }, error => {
+                console.error('AD ACCESS LOAD FAILED:', error);
+                adAccessData = null;
+                adAccessLoaded = false;
+                renderAdCards();
+                updateDailyAdsProgressUI();
+
+                if (first) {
+                    first = false;
+                    resolve(false);
+                }
+            });
+    }).then(result => {
+        if (adAccessCountdownTimer) clearInterval(adAccessCountdownTimer);
+
+        adAccessCountdownTimer = setInterval(() => {
+            const active = hasActiveAdAccess();
+
+            if (adAccessWasActive && !active) {
+                adAccessWasActive = false;
+                if (isAdPlaying) closeAdPageAndReturn();
+                renderAdCards();
+                updateDailyAdsProgressUI();
+            }
+
+            updateAdAccessCountdownText();
+        }, 1000);
+
+        return result;
+    });
+}
+
+async function findAdAccessUserByEmail(email) {
+    const snap = await db.collection('users')
+        .where('email', '==', email)
+        .limit(1)
+        .get();
+
+    if (snap.empty) throw new Error('USER_NOT_FOUND');
+    return snap.docs[0];
+}
+
+async function adminRevokeAdAccess() {
+    if (!isAdmin || !auth.currentUser) {
+        showToast('❌ Admin permission required', 'error');
+        return;
+    }
+
+    const input = document.getElementById('adminAdAccessEmail');
+    const msg = document.getElementById('adminAdAccessMsg');
+    const email = input ? input.value.trim() : '';
+
+    if (!email) {
+        if (msg) msg.textContent = 'User Email ထည့်ပါ။';
+        return;
+    }
+
+    try {
+        if (msg) msg.textContent = 'စစ်ဆေးနေပါသည်...';
+
+        const target = await findAdAccessUserByEmail(email);
+
+        await db.collection('adAccess').doc(target.id).set({
+            active: false,
+            status: 'revoked',
+            email: email,
+            revokedAt: firebase.firestore.FieldValue.serverTimestamp(),
+            revokedBy: auth.currentUser.uid
+        }, { merge: true });
+
+        if (msg) msg.textContent = '🔒 Ads Access ပြန်ရုပ်သိမ်းပြီးပါပြီ။';
+        showToast('🔒 Ads Access Revoked', 'success');
+    } catch (e) {
+        console.error('REVOKE ACCESS FAILED:', e);
+        const message = e.code === 'permission-denied'
+            ? 'Firestore Permission မရပါ။ Admin UID နှင့် Rules ကိုစစ်ပါ။'
+            : e.message === 'USER_NOT_FOUND'
+                ? 'ဒီ Email နဲ့ User မတွေ့ပါ။'
+                : (e.message || 'Access ပြန်ရုပ်သိမ်းမရပါ။');
+
+        if (msg) msg.textContent = '❌ ' + message;
+        showToast('❌ ' + message, 'error');
+    }
+}
+
+async function flushPendingAdRewards(force = false) {
+    if (!currentUser || isAccountRestricted() || !hasActiveAdAccess() || _adRewardFlushPromise) return false;
+
+    const pending = getPendingAdRewards();
+    if (!pending.count || (!force && pending.count < AD_SYNC_BATCH)) return false;
+
+    _adRewardFlushPromise = (async () => {
+        try {
+            const uid = currentUser.uid;
+            const today = new Intl.DateTimeFormat('en-CA', {
+                timeZone: 'Asia/Yangon'
+            }).format(new Date());
+
+            const batch = db.batch();
+            const userRef = db.collection('users').doc(uid);
+            const adRef = db.collection('adWatches').doc(uid + '_' + today);
+            const txRef = db.collection('transactions').doc();
+
+            batch.update(userRef, {
+                coins: firebase.firestore.FieldValue.increment(pending.coins),
+                totalAds: firebase.firestore.FieldValue.increment(pending.count)
+            });
+
+            batch.set(adRef, {
+                userId: uid,
+                authUid: uid,
+                username: userData.username || 'User',
+                email: userData.email || '',
+                date: today,
+                count: firebase.firestore.FieldValue.increment(pending.count),
+                totalCoins: firebase.firestore.FieldValue.increment(pending.coins),
+                lastWatch: firebase.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
+
+            // Update the public leaderboard only for newly queued ads.
+            // Legacy pending ads are excluded because they may already
+            // have been counted by the previous per-ad update logic.
+            const leaderboardDelta = Math.max(
+                0,
+                Number(pending.count || 0) -
+                Number(pending.leaderboardSyncedCount ?? pending.count ?? 0)
+            );
+            const leaderboardCoinsDelta = Math.max(
+                0,
+                Number(pending.coins || 0) -
+                Number(pending.leaderboardSyncedCoins ?? pending.coins ?? 0)
+            );
+
+            if (leaderboardDelta > 0) {
+                const leaderboardRef = db.collection('publicLeaderboard')
+                    .doc(uid + '_' + today);
+
+                batch.set(leaderboardRef, {
+                    userId: uid,
+                    username: (userData && userData.username) || 'User',
+                    date: today,
+                    count: firebase.firestore.FieldValue.increment(leaderboardDelta),
+                    totalCoins: firebase.firestore.FieldValue.increment(leaderboardCoinsDelta),
+                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                }, { merge: true });
+            }
+
+            batch.set(txRef, {
+                userId: uid,
+                type: 'ad_watch_batch',
+                amount: pending.coins,
+                description: `${pending.count} ads - ${pending.lastTitle || 'Ad Watch'}`,
+                timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            });
+
+            await batch.commit();
+
+            setPendingAdRewards({ count: 0, coins: 0, lastTitle: '' });
+            console.log('✅ AD REWARD BATCH SYNC OK:', pending.count, pending.coins);
+
+            return true;
+        } catch (e) {
+            console.error('AD REWARD SYNC FAILED:', e.code, e.message);
+            try {
+                showToast('⚠️ Ad Sync Failed: ' + (e.code || 'unknown'), 'error');
+            } catch (_) {}
+            return false;
+        } finally {
+            _adRewardFlushPromise = null;
+        }
+    })();
+
+    return await _adRewardFlushPromise;
+}
+
+const MAX_LEVEL = 20;
+const MAX_AD_LEVEL = 5;
+
+const LEVELS = [
+    { level: 1, ads: 5000, dailyReward: 6000, title: 'Novice', vip: 'Bronze', color: '#cd7f32' },
+    { level: 2, ads: 10000, dailyReward: 8000, title: 'Rookie', vip: 'Silver', color: '#c0c0c0' },
+    { level: 3, ads: 15000, dailyReward: 10000, title: 'Fighter', vip: 'Gold', color: '#ffd700' },
+    { level: 4, ads: 20000, dailyReward: 12000, title: 'Warrior', vip: 'Platinum', color: '#e5e4e2' },
+    { level: 5, ads: 25000, dailyReward: 14000, title: 'Elite', vip: 'Diamond', color: '#b9f2ff' },
+
+    ...Array.from({ length: MAX_LEVEL - MAX_AD_LEVEL }, (_, i) => {
+        const level = i + MAX_AD_LEVEL + 1;
+        const colors = ['#a78bfa', '#60a5fa', '#34d399', '#f59e0b', '#f472b6'];
+        return {
+            level,
+            ads: null,
+            dailyReward: 14000 + ((level - 5) * 2000),
+            title: 'VIP ' + level,
+            vip: 'VIP ' + level,
+            color: colors[i % colors.length]
+        };
+    })
+];
+
+const ACHIEVEMENTS = [
+    { id: 'first_ad', icon: '🎬', title: 'First Ad', desc: 'ပထမဆုံး Ad ကြည့်', target: 1, type: 'ads', reward: 100 },
+    { id: 'ad_10', icon: '📺', title: 'Ad Fan', desc: '10 ads ကြည့်', target: 10, type: 'ads', reward: 250 },
+    { id: 'ad_50', icon: '🎯', title: 'Ad Hunter', desc: '50 ads ကြည့်', target: 50, type: 'ads', reward: 500 },
+    { id: 'ad_100', icon: '🏅', title: 'Ad Master', desc: '100 ads ကြည့်', target: 100, type: 'ads', reward: 1000 },
+    { id: 'ad_500', icon: '👑', title: 'Ad King', desc: '500 ads ကြည့်', target: 500, type: 'ads', reward: 1000 },
+    { id: 'coin_1000', icon: '💰', title: 'Rich', desc: '1,000 coins', target: 1000, type: 'coins', reward: 200 },
+    { id: 'coin_10000', icon: '💎', title: 'Tycoon', desc: '10,000 coins', target: 10000, type: 'coins', reward: 500 },
+    { id: 'ref_1', icon: '👥', title: 'Inviter', desc: '1 ယောက် ဖိတ်', target: 1, type: 'refs', reward: 500 },
+    { id: 'ref_10', icon: '🌟', title: 'Super Inviter', desc: '10 ယောက် ဖိတ်', target: 10, type: 'refs', reward: 1000 }
+];
+
+const AD_CARDS = [
+    { id: 'ad1', type: 'watch', title: 'Ad 1', icon: '📺', reward: AD_REWARD },
+    { id: 'ad2', type: 'watch', title: 'Ad 2', icon: '🎬', reward: AD_REWARD },
+    { id: 'ad3', type: 'download', title: 'Ad 3', icon: '📥', reward: AD_REWARD },
+    { id: 'ad4', type: 'download', title: 'Ad 4', icon: '📲', reward: AD_REWARD }
+];
+
+// ============================================================
+//  MULTI-LANGUAGE — COMPLETE UI TRANSLATION
+// ============================================================
+const TRANSLATIONS = {
+  my: {
+    home:'ပင်မ', rank:'အဆင့်', refer:'ဖိတ်', profile:'ကိုယ်ရေး',
+    earn:'ရယူ', bonus:'ဘောနပ်', level:'အဆင့်', awards:'ဆုများ',
+    leaderboard:'အဆင့်ဇယား', adTasks:'Ad တာဝန်များ', language:'ဘာသာစကား',
+    dailyBonus:'နေ့စဉ် ဘောနပ်စ်', vipLevel:'VIP အဆင့်', dashboard:'ဒက်ရှ်ဘုတ်',
+    totalBalance:'စုစုပေါင်း လက်ကျန်', nextLevel:'နောက်အဆင့်', progress:'တိုးတက်မှု'
+  },
+  en: {
+    home:'Home', rank:'Rank', refer:'Refer', profile:'Profile',
+    earn:'Earn', bonus:'Bonus', level:'Level', awards:'Awards',
+    leaderboard:'Leaderboard', adTasks:'Ad Tasks', language:'Language',
+    dailyBonus:'Daily Bonus', vipLevel:'VIP Level', dashboard:'Dashboard',
+    totalBalance:'Total Balance', nextLevel:'Next Level', progress:'Progress'
+  }
+};
+
+/* Static + dynamic UI text pairs.  The original text is kept as the key,
+   so switching MY → EN → MY remains reversible. */
+const UI_TEXT = {
+  'CASH TUBE':['CASH TUBE','CASH TUBE'],
+  'R E W A R D S':['R E W A R D S','R E W A R D S'],
+  'Loading your rewards':['ဆုလာဘ်များကို ဖွင့်နေသည်','Loading your rewards'],
+  '📱 Local Mode':['📱 Local Mode','📱 Local Mode'],
+  'REWARD EARNED':['ဆုလာဘ်ရရှိပြီး','REWARD EARNED'],
+  'coins added to your wallet':['Coin များ Wallet ထဲသို့ ထည့်ပြီးပါပြီ','coins added to your wallet'],
+  'Total:':['စုစုပေါင်း:','Total:'],
+  'Loading...':['ဖွင့်နေသည်...','Loading...'],
+  'MAIN':['ပင်မ','MAIN'],
+  'Ad Tasks':['Ad တာဝန်များ','Ad Tasks'],
+  'VIP Level':['VIP အဆင့်','VIP Level'],
+  'Market':['ဈေးကွက်','Market'],
+  'Leaderboard':['အဆင့်ဇယား','Leaderboard'],
+  'ACCOUNT':['အကောင့်','ACCOUNT'],
+  'Profile':['ကိုယ်ရေးအချက်အလက်','Profile'],
+  'Refer & Earn':['ဖိတ်ခေါ်ပြီး ရယူမည်','Refer & Earn'],
+  'Achievements':['အောင်မြင်မှုဆုများ','Achievements'],
+  'History':['မှတ်တမ်း','History'],
+  'SETTINGS':['ဆက်တင်များ','SETTINGS'],
+  'Dark / Light':['အမှောင် / အလင်း','Dark / Light'],
+  'Language':['ဘာသာစကား','Language'],
+  'English':['အင်္ဂလိပ်','English'],
+  'Logout':['ထွက်မည်','Logout'],
+  'Watch ads & earn rewards':['ကြော်ငြာကြည့်ပြီး ဆုလာဘ်ရယူပါ','Watch ads & earn rewards'],
+  'Email':['အီးမေးလ်','Email'],
+  'Password':['စကားဝှက်','Password'],
+  'Sign In':['ဝင်မည်','Sign In'],
+  'No account?':['အကောင့်မရှိသေးပါက?','No account?'],
+  'Sign Up':['အကောင့်ဖွင့်မည်','Sign Up'],
+  'Username':['အသုံးပြုသူအမည်','Username'],
+  'Password (min 6)':['စကားဝှက် (အနည်းဆုံး ၆ လုံး)','Password (min 6)'],
+  'Referral Code (Optional)':['ဖိတ်ခေါ်ကုဒ် (မဖြည့်လည်းရ)','Referral Code (Optional)'],
+  'Create Account':['အကောင့်ဖန်တီးမည်','Create Account'],
+  'Already have account?':['အကောင့်ရှိပြီးသားလား?','Already have account?'],
+  'TOTAL BALANCE':['စုစုပေါင်း လက်ကျန်','TOTAL BALANCE'],
+  'Bronze':['ကြေးတံဆိပ်','Bronze'],
+  'Level 1':['အဆင့် ၁','Level 1'],
+  'Next Level':['နောက်အဆင့်','Next Level'],
+  'QUICK ACTIONS':['အမြန်လုပ်ဆောင်ချက်များ','QUICK ACTIONS'],
+  'Earn':['ရယူမည်','Earn'],
+  'Bonus':['ဘောနပ်စ်','Bonus'],
+  'Level':['အဆင့်','Level'],
+  'Rank':['အဆင့်ဇယား','Rank'],
+  'Refer':['ဖိတ်ခေါ်မည်','Refer'],
+  'Awards':['ဆုများ','Awards'],
+  'See All':['အားလုံးကြည့်မည်','See All'],
+  'Daily Bonus':['နေ့စဉ် ဘောနပ်စ်','Daily Bonus'],
+  'Daily Reward':['နေ့စဉ် ဆုလာဘ်','Daily Reward'],
+  'Claim once every 24 hours':['၂၄ နာရီလျှင် တစ်ကြိမ် ရယူနိုင်သည်','Claim once every 24 hours'],
+  'View':['ကြည့်မည်','View'],
+  'Novice':['အစပြုသူ','Novice'],
+  'Dashboard':['ဒက်ရှ်ဘုတ်','Dashboard'],
+  'Refresh':['ပြန်လည်စတင်မည်','Refresh'],
+  'Wallet':['ပိုက်ဆံအိတ်','Wallet'],
+  'Ad Playing...':['Ad ဖွင့်နေသည်...','Ad Playing...'],
+  'Ad Loading...':['Ad ဖွင့်ရန် ပြင်ဆင်နေသည်...','Ad Loading...'],
+  'Coin Gift ပို့ရန်':['Coin Gift ပို့ရန်','Send Coin Gift'],
+  'ပို့မည် (Fee 20 Coin)':['ပို့မည် (Fee 20 Coin)','Send (20 Coin Fee)'],
+  'Refer & Earn +500':['ဖိတ်ခေါ်ပြီး +500 ရယူမည်','Refer & Earn +500'],
+  'Transaction History':['ငွေလွှဲမှတ်တမ်း','Transaction History'],
+  'Level Bonus ရယူမည်':['Level Bonus ရယူမည်','Claim Level Bonus'],
+  '📊 Level List':['📊 အဆင့်စာရင်း','📊 Level List'],
+  'Today':['ယနေ့','Today'],
+  'This Week':['ဒီအပတ်','This Week'],
+  'All Time':['အချိန်အားလုံး','All Time'],
+  'Your Referral Code':['သင့် Referral Code','Your Referral Code'],
+  'Invited':['ဖိတ်ခေါ်ထားသူ','Invited'],
+  'Earned':['ရရှိပြီး','Earned'],
+  'Share လုပ်မည်':['မျှဝေမည်','Share'],
+  'No referrals yet':['ဖိတ်ခေါ်ထားသူ မရှိသေးပါ','No referrals yet'],
+  '💵 USD → MMK':['💵 USD → MMK','💵 USD → MMK'],
+  '1 Coin = --- MMK':['1 Coin = --- MMK','1 Coin = --- MMK'],
+  '🪙 Coin → MMK':['🪙 Coin → MMK','🪙 Coin → MMK'],
+  '10,000 Coins = --- MMK':['10,000 Coins = --- MMK','10,000 Coins = --- MMK'],
+  '💰 Your MMK Balance':['💰 သင့် MMK လက်ကျန်','💰 Your MMK Balance'],
+  '🔒 Exchange ပိတ်ထားပါသည်':['🔒 Exchange ပိတ်ထားပါသည်','🔒 Exchange is closed'],
+  'Exchange':['လဲလှယ်မည်','Exchange'],
+  'Balance Coin':['လက်ကျန် Coin','Balance Coin'],
+  'Rate':['နှုန်းထား','Rate'],
+  'Coin Amount':['Coin အရေအတွက်','Coin Amount'],
+  '1K':['1K','1K'],'3K':['3K','3K'],'5K':['5K','5K'],'10K':['10K','10K'],
+  "You'll receive:":["ရရှိမည့်ပမာဏ:","You'll receive:"],
+  'Confirm':['အတည်ပြုမည်','Confirm'],
+  'Admin Panel':['Admin Panel','Admin Panel'],
+  'Admin ID':['Admin ID','Admin ID'],
+  'Login':['ဝင်မည်','Login'],
+  '✅ Logged in':['✅ ဝင်ရောက်ပြီး','✅ Logged in'],
+  'App Download Links':['App Download Links','App Download Links'],
+  'Link':['လင့်ခ်','Link'],
+  'Action':['လုပ်ဆောင်ချက်','Action'],
+  'Ad Watch Links':['Ad Watch Links','Ad Watch Links'],
+  'Exchange Rate':['လဲလှယ်နှုန်း','Exchange Rate'],
+  'Set':['သတ်မှတ်မည်','Set'],
+  'Current: 1$ =':['လက်ရှိ: 1$ =','Current: 1$ ='],
+  'Coins':['Coin များ','Coins'],
+  'USD → MMK Rate':['USD → MMK နှုန်း','USD → MMK Rate'],
+  'Current:':['လက်ရှိ:','Current:'],
+  'Ks':['ကျပ်','Ks'],
+  'Watch':['ကြည့်မည်','Watch'],
+  'Download':['ဒေါင်းလုဒ်','Download'],
+  'wait':['စောင့်ပါ','wait'],
+  'Error loading':['ဖွင့်ရာတွင် အမှားဖြစ်နေသည်','Error loading'],
+  'Please login':['ကျေးဇူးပြု၍ အရင်ဝင်ပါ','Please login'],
+  '❌ Link မရှိ':['❌ လင့်ခ် မရှိသေးပါ','❌ No link available'],
+  '⏳ Ad ကနေဆဲ':['⏳ Ad လုပ်ဆောင်နေဆဲပါ','⏳ Ad is still running']
+};
+
+function normUIText(v){ return String(v ?? '').replace(/\s+/g,' ').trim(); }
+
+function translateDOM(lang){
+  if(!UI_TEXT) return;
+  const walker=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);
+  const nodes=[];
+  while(walker.nextNode()) nodes.push(walker.currentNode);
+  nodes.forEach(node=>{
+    const raw=normUIText(node.nodeValue);
+    if(!raw) return;
+    const pair=UI_TEXT[raw];
+    if(pair) node.nodeValue=node.nodeValue.replace(raw,pair[lang==='my'?0:1]);
+  });
+  document.querySelectorAll('input[placeholder],textarea[placeholder]').forEach(el=>{
+    const pair=UI_TEXT[normUIText(el.getAttribute('placeholder'))];
+    if(pair) el.setAttribute('placeholder',pair[lang==='my'?0:1]);
+  });
+  document.querySelectorAll('[title],[aria-label]').forEach(el=>{
+    ['title','aria-label'].forEach(attr=>{
+      const val=normUIText(el.getAttribute(attr));
+      const pair=UI_TEXT[val];
+      if(pair) el.setAttribute(attr,pair[lang==='my'?0:1]);
+    });
+  });
+  /* Dynamic counters */
+  document.querySelectorAll('*').forEach(el=>{
+    if(el.children.length) return;
+    const t=normUIText(el.textContent);
+    if(/^\d+\/\d+\s+ads$/i.test(t)){
+      const n=t.split(' ')[0];
+      el.textContent=lang==='my'?`${n} ကြော်ငြာ`:`${n} ads`;
+    }
+    if(/^\d+:\d+\s+(wait|စောင့်ပါ)$/i.test(t)){
+      el.textContent=t.replace(/\s+(wait|စောင့်ပါ)$/i,lang==='my'?' စောင့်ပါ':' wait');
+    }
+  });
+}
+
+let currentLang = localStorage.getItem('appLang') || 'my';
+
+function switchLanguage(lang) {
+  if (!TRANSLATIONS[lang]) lang='my';
+  currentLang=lang;
+  localStorage.setItem('appLang',lang);
+
+  document.querySelectorAll('[data-i18n]').forEach(el=>{
+    const key=el.getAttribute('data-i18n');
+    if(TRANSLATIONS[lang][key]) el.textContent=TRANSLATIONS[lang][key];
+  });
+
+  translateDOM(lang);
+
+  const myBtn=document.getElementById('langMyBtn');
+  const enBtn=document.getElementById('langEnBtn');
+  if(myBtn) myBtn.classList.toggle('active',lang==='my');
+  if(enBtn) enBtn.classList.toggle('active',lang==='en');
+  document.documentElement.lang=lang==='my'?'my':'en';
+
+  if(typeof renderAdCards==='function') renderAdCards();
+  translateDOM(lang);
+  if(typeof currentLeaderboardType!=='undefined' && currentLeaderboardType && typeof loadLeaderboard==='function'){
+    loadLeaderboard(currentLeaderboardType);
+  }
+}
+
+function toggleLanguage(){ switchLanguage(currentLang==='my'?'en':'my'); }
+function applyLanguage(){ switchLanguage(currentLang); }
+
+// Translate newly-rendered text without interfering with forms.
+const _uiLangObserver=new MutationObserver(muts=>{
+  if(!document.body) return;
+  clearTimeout(window._uiLangTimer);
+  window._uiLangTimer=setTimeout(()=>translateDOM(currentLang),60);
+});
+if(document.body) _uiLangObserver.observe(document.body,{subtree:true,childList:true});
+
+// ============================================================
+//  STATE
+// ============================================================
+let adLinks = [];
+let appLinks = [];
+let currentUser = null;
+
+// Account restriction helpers
+function isAccountRestricted() {
+    return !!currentUser && userData.isBanned === true;
+}
+
+function showRestrictedNotice() {
+    showToast('⛔ Account Restricted — Admin မှ စစ်ဆေးနေပါသည်', 'error');
+}
+
+function updateDangerZoneUI() {
+    const panel = document.getElementById('dangerZonePanel');
+    if (panel) {
+        panel.style.display = isAccountRestricted() ? 'block' : 'none';
+    }
+}
+let userData = {
+    coins: 0, usdt: 0, username: 'User', email: '',
+    isBanned: false, level: 1, totalAds: 0, refCode: '',
+    referredBy: '', referralCount: 0, referralEarned: 0,
+    mmkBalance: 0,
+    claimedLevels: [], unlockedAch: [], claimedAch: []
+};
+let isAdmin = false;
+let exchangeRate = 3000; // legacy USD→Coin setting
+let mmkRate = 0; // legacy USD→MMK setting
+let coinMmkRate = 0; // MMK value for 10,000 Coins (admin controlled)
+let isExchangeOpen = true;
+let exchangeOpenDate = null;
+let isUpdatingCoins = false;
+let isAdPlaying = false;
+
+let purchaseHistoryCache = null;
+let purchaseHistoryUid = null;
+let purchaseHistoryLoading = false;
+
+let adAccessData = null;
+let adAccessLoaded = false;
+let adAccessUnsubscribe = null;
+let adAccessRequestData = null;
+let adAccessRequestUnsubscribe = null;
+let adAccessCountdownTimer = null;
+let adAccessWasActive = false;
+let adCardTimers = {};
+let adPageInterval = null;
+let currentAdCard = null;
+let isWithdrawOpen = localStorage.getItem('isWithdrawOpen') === 'true';
+let currentLeaderboardType = 'today';
+
+// ============================================================
+//  HELPERS
+// ============================================================
+function acquireCoinLock() {
+    if (isUpdatingCoins) return false;
+    isUpdatingCoins = true;
+    setTimeout(() => { isUpdatingCoins = false; }, 10000);
+    return true;
+}
+function releaseCoinLock() { isUpdatingCoins = false; }
+function generateRefCode() { return Math.random().toString(36).substring(2, 10).toUpperCase(); }
+
+let audioContext = null;
+function playCoinSound() {
+    try {
+        if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const now = audioContext.currentTime;
+        playTone(988, now, 0.08, 0.3);
+        playTone(1319, now + 0.08, 0.2, 0.25);
+        playTone(1760, now + 0.15, 0.15, 0.15);
+    } catch (e) {}
+}
+function playBigRewardSound() {
+    try {
+        if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const now = audioContext.currentTime;
+        playTone(523, now, 0.1, 0.2);
+        playTone(659, now + 0.1, 0.1, 0.25);
+        playTone(784, now + 0.2, 0.1, 0.3);
+        playTone(1047, now + 0.3, 0.15, 0.35);
+        playTone(1319, now + 0.45, 0.3, 0.4);
+    } catch (e) {}
+}
+function playTone(freq, start, dur, vol) {
+    try {
+        const osc = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0, start);
+        gain.gain.linearRampToValueAtTime(vol, start + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.001, start + dur);
+        osc.connect(gain);
+        gain.connect(audioContext.destination);
+        osc.start(start);
+        osc.stop(start + dur);
+    } catch (e) {}
+}
+
+// ============================================================
+//  COIN ANIMATION
+// ============================================================
+function showCoinAnimation(amount, totalCoins) {
+    const overlay = document.getElementById('coinAnimationOverlay');
+    const amountEl = document.getElementById('rewardAmountNum');
+    const totalEl = document.getElementById('rewardTotalCoins');
+    if (!overlay) return;
+    amountEl.textContent = '0';
+    totalEl.textContent = totalCoins;
+    document.querySelectorAll('.coin-particle, .confetti').forEach(el => el.remove());
+    overlay.classList.add('show');
+    if (amount >= 100) playBigRewardSound(); else playCoinSound();
+    setTimeout(() => { overlay.classList.add('shake'); setTimeout(() => overlay.classList.remove('shake'), 700); }, 100);
+
+    for (let i = 0; i < 50; i++) {
+        setTimeout(() => {
+            const coin = document.createElement('div');
+            coin.className = 'coin-particle';
+            coin.textContent = '💎';
+            coin.style.cssText = `position:absolute;width:${28 + Math.random()*18}px;height:${28 + Math.random()*18}px;border-radius:50%;background:linear-gradient(135deg,#3b82f6,#10b981);box-shadow:0 0 25px rgba(59,130,246,0.6);display:flex;align-items:center;justify-content:center;font-size:16px;top:-80px;left:${Math.random()*100}%;animation:coinFall 2.8s cubic-bezier(0.34,0.5,0.64,1) forwards;animation-delay:${Math.random()*0.5}s;`;
+            overlay.appendChild(coin);
+            setTimeout(() => coin.remove(), 4000);
+        }, i * 25);
+    }
+
+    const duration = 1600;
+    const start = Date.now();
+    const countUp = () => {
+        const elapsed = Date.now() - start;
+        const progress = Math.min(elapsed / duration, 1);
+        const eased = 1 - Math.pow(1 - progress, 4);
+        amountEl.textContent = Math.round(amount * eased);
+        if (progress < 1) requestAnimationFrame(countUp);
+        else amountEl.textContent = amount;
+    };
+    requestAnimationFrame(countUp);
+    if (navigator.vibrate) navigator.vibrate([80, 40, 80, 40, 150]);
+    setTimeout(() => overlay.classList.remove('show'), 4500);
+}
+
+const styleEl = document.createElement('style');
+styleEl.textContent = `@keyframes coinFall { 0% { top:-80px; opacity:0; transform:rotate(0deg) scale(0.3); } 15% { opacity:1; transform:rotate(180deg) scale(1.3); } 85% { opacity:1; } 100% { top:115vh; opacity:0; transform:rotate(1080deg) scale(0.5); } }`;
+document.head.appendChild(styleEl);
+
+// ============================================================
+//  LEVEL SYSTEM
+// ============================================================
+function getCurrentLevel() {
+    const adsLevel = getLevelFromAds(Number(userData.totalAds || 0));
+    const storedLevel = Math.max(
+        1,
+        Math.min(MAX_LEVEL, Math.floor(Number(userData.level) || 1))
+    );
+    const effectiveLevel = Math.max(storedLevel, adsLevel);
+    return LEVELS.find(l => l.level === effectiveLevel) || LEVELS[0];
+}
+
+function getNextLevel() {
+    const current = getCurrentLevel();
+    return current.level < MAX_LEVEL
+        ? LEVELS.find(l => l.level === current.level + 1) || null
+        : null;
+}
+
+function getLevelFromAds(ads) {
+    let lvl = 1;
+    const totalAds = Number(ads || 0);
+
+    for (const l of LEVELS) {
+        if (l.level > MAX_AD_LEVEL) break;
+        if (totalAds >= l.ads) lvl = l.level;
+    }
+    return lvl;
+}
+
+function updateLevelUI() {
+    const current = getCurrentLevel();
+    const next = getNextLevel();
+    const ads = Number(userData.totalAds || 0);
+
+    ['vipTitle'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = current.vip;
+    });
+
+    const setText = (id, value) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = value;
+    };
+    const setWidth = (id, value) => {
+        const el = document.getElementById(id);
+        if (el) el.style.width = value + '%';
+    };
+
+    setText('levelTitle', 'Level ' + current.level);
+    setText('lvlNumBig', current.level);
+    setText('lvlTitleBig', current.title);
+    setText('lvlNumModal', current.level);
+    setText('lvlTitleModal', current.title);
+
+    if (next && next.ads !== null && current.ads !== null) {
+        const pct = Math.max(
+            0,
+            Math.min(100, ((ads - current.ads) / (next.ads - current.ads)) * 100)
+        );
+
+        ['lvlProgressFill', 'lvlProgressModal', 'heroProgressFill']
+            .forEach(id => setWidth(id, pct));
+
+        setText('lvlProgressLabel', `${ads}/${next.ads} ads`);
+        setText('lvlProgressLabelModal', `${ads}/${next.ads} ads`);
+        setText('nextLevelLabel', `${ads}/${next.ads} ads`);
+        setText('lvlDescBig', `Ad ${Math.max(0, next.ads - ads)} ခု ထပ်ကြည့်ပြီး Level ${next.level} ရောက်နိုင်မယ်`);
+        setText('lvlDescModal', `Level ${next.level} အတွက် စုစုပေါင်း ${next.ads} Ads လိုအပ်သည်`);
+    } else if (next) {
+        ['lvlProgressFill', 'lvlProgressModal', 'heroProgressFill']
+            .forEach(id => setWidth(id, 0));
+
+        setText('lvlProgressLabel', 'Paid Upgrade');
+        setText('lvlProgressLabelModal', 'Paid Upgrade');
+        setText('nextLevelLabel', 'Paid Upgrade');
+        setText('lvlDescBig', `5,000 MMK ပေးချေပြီး LV${next.level} သို့ Upgrade လုပ်နိုင်ပါသည်။`);
+        setText('lvlDescModal', `LV${next.level} သို့ တက်ရန် Admin Approval လိုအပ်ပါသည်။`);
+    } else {
+        ['lvlProgressFill', 'lvlProgressModal', 'heroProgressFill']
+            .forEach(id => setWidth(id, 100));
+
+        setText('lvlProgressLabel', 'MAX');
+        setText('lvlProgressLabelModal', 'MAX');
+        setText('nextLevelLabel', 'MAX LEVEL');
+        setText('lvlDescBig', 'အမြင့်ဆုံး Level ရောက်နေပါပြီ');
+        setText('lvlDescModal', 'MAX LEVEL');
+    }
+
+    const list = document.getElementById('levelListContainer');
+    if (list) {
+        list.innerHTML = LEVELS.map(l => {
+            const unlockText = l.ads === null
+                ? 'Paid Upgrade'
+                : l.ads.toLocaleString() + ' total ads';
+
+            return `<div style="display:flex;align-items:center;gap:12px;padding:12px;background:var(--slate-50);border-radius:14px;margin-bottom:8px;border:1px solid ${current.level >= l.level ? 'var(--mint-400)' : 'var(--border-light)'};">
+                <div style="width:40px;height:40px;border-radius:50%;background:${l.color};display:flex;align-items:center;justify-content:center;font-weight:900;color:#fff;">${l.level}</div>
+                <div style="flex:1;">
+                    <div style="font-size:13px;font-weight:800;">${l.title} <small>${l.vip}</small></div>
+                    <div style="font-size:10px;color:var(--text-3);">Unlock: ${unlockText} • Daily ${l.dailyReward.toLocaleString()} coins</div>
+                </div>
+                <div>${current.level >= l.level ? '✅' : '🔒'}</div>
+            </div>`;
+        }).join('');
+    }
+
+    const info = document.getElementById('levelUpgradeInfo');
+    const btn = document.getElementById('paidLevelRequestBtn');
+
+    if (info) {
+        info.textContent = next
+            ? `လက်ရှိ LV${current.level} → LV${next.level}။ 5,000 MMK ပေးချေပြီး Level Upgrade Request တင်နိုင်ပါသည်။`
+            : 'အမြင့်ဆုံး Level ရောက်ရှိပြီးပါပြီ။';
+    }
+
+    if (btn) {
+        btn.disabled = !next;
+        btn.style.opacity = next ? '1' : '.5';
+        btn.textContent = next
+            ? `Request LV${next.level} Upgrade • 5,000 MMK`
+            : 'MAX LEVEL';
+    }
+
+    updateDailyAdsProgressUI();
+}
+
+async function submitFreeLevelRequest() {
+    if (!currentUser) {
+        showToast('Login လုပ်ပါ', 'error');
+        return;
+    }
+
+    const next = getNextLevel();
+    if (!next) {
+        showToast('MAX LEVEL ရောက်ပြီးပါပြီ', 'warning');
+        return;
+    }
+
+    const btn = document.getElementById('freeLevelRequestBtn');
+    const statusBox = document.getElementById('freeLevelRequestStatus');
+
+    const method = document.getElementById('levelRequestMethod')?.value || '';
+    const reference = document.getElementById('levelRequestReference')?.value.trim() || '';
+
+    if (!['WavePay', 'KPay'].includes(method)) {
+        showToast('WavePay သို့မဟုတ် KPay ရွေးချယ်ပါ', 'warning');
+        return;
+    }
+
+    if (!/^\\d{5}$/.test(reference)) {
+        showToast('Refer ID ကို ဂဏန်း ၅ လုံး အတိအကျ ထည့်ပါ', 'warning');
+        return;
+    }
+
+    if (btn) btn.disabled = true;
+
+    try {
+        const ref = db.collection('freeLevelRequests').doc(currentUser.uid);
+        const existing = await ref.get();
+
+        if (existing.exists && existing.data().status === 'pending') {
+            if (statusBox) statusBox.textContent = '⏳ Pending Request ရှိပြီးသားပါ။';
+            showToast('Pending Request ရှိပြီးသားပါ', 'warning');
+            return;
+        }
+
+        if (existing.exists && existing.data().status === 'approved') {
+            if (statusBox) statusBox.textContent = 'ဒီ Request ကို Approve လုပ်ပြီးပါပြီ။';
+            showToast('Request ကို Approve လုပ်ပြီးပါပြီ', 'info');
+            return;
+        }
+
+        const current = getCurrentLevel();
+
+        await ref.set({
+            userId: currentUser.uid,
+            username: userData.username || 'User',
+            email: currentUser.email || '',
+            fromLevel: current.level,
+            toLevel: next.level,
+            status: 'pending',
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+
+        if (statusBox) statusBox.textContent = '⏳ Request တင်ပြီးပါပြီ။ Admin စစ်ဆေးပေးပါမည်။';
+        showToast('Free Level Request တင်ပြီးပါပြီ', 'success');
+
+    } catch (e) {
+        console.error('Free Level Request:', e);
+        if (statusBox) statusBox.textContent = 'Request မတင်နိုင်ပါ: ' + (e.code || e.message);
+        showToast('Request မတင်နိုင်ပါ: ' + (e.code || e.message), 'error');
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+}
+
+let levelPaymentAccounts = { waveName: '', wavePhone: '', kpayName: '', kpayPhone: '' };
+
+function renderLevelPaymentDestination() {
+    const box = document.getElementById('levelPaymentDestination');
+    if (!box) return;
+    const method = document.getElementById('levelRequestMethod')?.value || '';
+    if (!method) { box.textContent = 'WavePay သို့မဟုတ် KBZPay ကိုရွေးချယ်ပါ။'; return; }
+    const isWave = method === 'WavePay';
+    const name = isWave ? levelPaymentAccounts.waveName : levelPaymentAccounts.kpayName;
+    const phone = isWave ? levelPaymentAccounts.wavePhone : levelPaymentAccounts.kpayPhone;
+    const label = isWave ? 'WavePay' : 'KBZPay';
+    box.innerHTML = name && phone
+        ? `<b>${label} ငွေလက်ခံအကောင့်</b><br>အမည်: ${escapeAdAccessText(name)}<br>ဖုန်း / အကောင့်: ${escapeAdAccessText(phone)}<br><small>5,000 MMK လွှဲပြီး Reference ID ၅ လုံးကို ထည့်ပါ။</small>`
+        : `<b>${label} အကောင့် မသတ်မှတ်ရသေးပါ။</b><br>Admin က Payment Receiving Accounts ကို အရင်ဖြည့်ပေးရပါမည်။`;
+}
+
+async function loadLevelPaymentAccounts(fillAdmin = false) {
+    try {
+        const snap = await db.collection('settings').doc('levelPaymentAccounts').get();
+        levelPaymentAccounts = snap.exists ? {
+            waveName: String(snap.data().waveName || ''),
+            wavePhone: String(snap.data().wavePhone || ''),
+            kpayName: String(snap.data().kpayName || ''),
+            kpayPhone: String(snap.data().kpayPhone || '')
+        } : { waveName: '', wavePhone: '', kpayName: '', kpayPhone: '' };
+        if (fillAdmin && isAdmin) {
+            const set = (id, value) => { const el = document.getElementById(id); if (el) el.value = value; };
+            set('levelWaveName', levelPaymentAccounts.waveName);
+            set('levelWavePhone', levelPaymentAccounts.wavePhone);
+            set('levelKpayName', levelPaymentAccounts.kpayName);
+            set('levelKpayPhone', levelPaymentAccounts.kpayPhone);
+        }
+    } catch (e) { console.warn('Load level payment accounts:', e); }
+    renderLevelPaymentDestination();
+    renderAdAccessPaymentDestination();
+}
+
+async function saveLevelPaymentAccounts() {
+    if (!isAdmin || !auth.currentUser) return;
+    const read = id => document.getElementById(id)?.value.trim() || '';
+    const data = {
+        waveName: read('levelWaveName'), wavePhone: read('levelWavePhone'),
+        kpayName: read('levelKpayName'), kpayPhone: read('levelKpayPhone'),
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        updatedBy: auth.currentUser.uid
+    };
+    if (!data.waveName || !data.wavePhone || !data.kpayName || !data.kpayPhone) {
+        showToast('WavePay နှင့် KBZPay အကောင့်အချက်အလက် အားလုံးဖြည့်ပါ', 'warning'); return;
+    }
+    const msg = document.getElementById('levelPaymentAccountsMsg');
+    try {
+        await db.collection('settings').doc('levelPaymentAccounts').set(data, { merge: true });
+        levelPaymentAccounts = {
+            waveName: data.waveName, wavePhone: data.wavePhone,
+            kpayName: data.kpayName, kpayPhone: data.kpayPhone
+        };
+        renderLevelPaymentDestination();
+        renderAdAccessPaymentDestination();
+        if (msg) msg.textContent = '✅ Payment accounts saved.';
+        showToast('Payment Receiving Accounts သိမ်းပြီးပါပြီ', 'success');
+    } catch (e) {
+        if (msg) msg.textContent = 'Save failed: ' + (e.code || e.message);
+        showToast('Payment account မသိမ်းနိုင်ပါ: ' + (e.code || e.message), 'error');
+    }
+}
+
+let _paidLevelStatusLoadedFor = '';
+
+async function loadPaidLevelRequestStatus(force = false) {
+    if (!currentUser) return;
+    if (!force && _paidLevelStatusLoadedFor === currentUser.uid) return;
+    _paidLevelStatusLoadedFor = currentUser.uid;
+    const box = document.getElementById('paidLevelRequestStatus');
+    if (!box) return;
+    try {
+        const next = getNextLevel();
+        if (!next) { box.textContent = 'အမြင့်ဆုံး Level ရောက်ရှိပြီးပါပြီ။'; return; }
+        const ref = db.collection('levelUpgradeRequests').doc(currentUser.uid + '_LV' + next.level);
+        const snap = await ref.get();
+        if (!snap.exists) { box.textContent = 'Level တစ်ဆင့်တက်ရန် 5,000 MMK ပေးချေပြီး Request တင်နိုင်ပါသည်။'; return; }
+        const d = snap.data();
+        box.textContent = d.status === 'pending' ? '⏳ Admin စစ်ဆေးနေပါသည်။'
+            : d.status === 'approved' ? '✅ Request Approved ဖြစ်ပြီး Level ပြောင်းပြီးပါပြီ။'
+            : d.status === 'rejected' ? '❌ Request Reject ဖြစ်ထားပါသည်။ အချက်အလက်ပြန်စစ်ပြီး Request ထပ်တင်နိုင်ပါသည်။'
+            : 'Request Status: ' + String(d.status || 'unknown');
+    } catch (e) {
+        console.warn('Paid level request status:', e);
+        box.textContent = 'Request Status ကို ယခုဖတ်မရပါ။';
+    }
+}
+
+async function submitPaidLevelRequest() {
+    if (!currentUser) { showToast('Login လုပ်ပါ', 'error'); return; }
+    const next = getNextLevel();
+    if (!next) { showToast('MAX LEVEL ရောက်ပြီးပါပြီ', 'warning'); return; }
+
+    const btn = document.getElementById('paidLevelRequestBtn');
+    const statusBox = document.getElementById('paidLevelRequestStatus');
+    const method = document.getElementById('levelRequestMethod')?.value || '';
+    const reference = document.getElementById('levelRequestReference')?.value.trim() || '';
+
+    if (!['WavePay', 'KPay'].includes(method)) {
+        showToast('WavePay သို့မဟုတ် KPay ရွေးချယ်ပါ', 'warning'); return;
+    }
+    if (!/^\d{5}$/.test(reference)) {
+        showToast('Reference ID ကို ဂဏန်း ၅ လုံး အတိအကျ ထည့်ပါ', 'warning'); return;
+    }
+    const accountReady = method === 'WavePay'
+        ? !!(levelPaymentAccounts.waveName && levelPaymentAccounts.wavePhone)
+        : !!(levelPaymentAccounts.kpayName && levelPaymentAccounts.kpayPhone);
+    if (!accountReady) {
+        showToast('Admin က ငွေလက်ခံအကောင့်ကို အရင်သတ်မှတ်ပေးရပါမည်။', 'warning');
+        await loadLevelPaymentAccounts();
+        return;
+    }
+
+    if (btn) btn.disabled = true;
+    try {
+        const current = getCurrentLevel();
+        const requestId = currentUser.uid + '_LV' + next.level;
+        const ref = db.collection('levelUpgradeRequests').doc(requestId);
+        const existing = await ref.get();
+
+        if (existing.exists && existing.data().status === 'pending') {
+            if (statusBox) statusBox.textContent = '⏳ ဒီ Level အတွက် Pending Request ရှိပြီးသားပါ။';
+            showToast('Pending Request ရှိပြီးသားပါ', 'warning'); return;
+        }
+        if (existing.exists && existing.data().status === 'approved') {
+            if (statusBox) statusBox.textContent = 'ဒီ Level ကို Approve လုပ်ပြီးပါပြီ။';
+            showToast('ဒီ Level ကို Approve လုပ်ပြီးပါပြီ', 'info'); return;
+        }
+
+        await ref.set({
+            userId: currentUser.uid,
+            username: userData.username || 'User',
+            email: currentUser.email || userData.email || '',
+            fromLevel: current.level,
+            toLevel: next.level,
+            amountMMK: 5000,
+            paymentMethod: method,
+            reference: reference,
+            status: 'pending',
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+
+        if (statusBox) statusBox.textContent = `⏳ LV${next.level} အတွက် 5,000 MMK Request တင်ပြီးပါပြီ။ Admin အတည်ပြုရန် စောင့်ပါ။`;
+        const refInput = document.getElementById('levelRequestReference');
+        if (refInput) refInput.value = '';
+        showToast('Paid Level Upgrade Request တင်ပြီးပါပြီ', 'success');
+        _paidLevelStatusLoadedFor = '';
+        await loadPaidLevelRequestStatus(true);
+    } catch (e) {
+        console.error('Paid Level Request:', e);
+        if (statusBox) statusBox.textContent = 'Request မတင်နိုင်ပါ: ' + (e.code || e.message);
+        showToast('Request မတင်နိုင်ပါ: ' + (e.code || e.message), 'error');
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+}
+
+
+async function claimDailyAdsReward() {
+    if (isAccountRestricted()) { showRestrictedNotice(); return; }
+    if(!currentUser)return;
+    if (!hasActiveAdAccess()) {
+        showToast('🔒 Ads Free Access မရှိသေးပါ။', 'error');
+        return;
+    }
+    const btn=document.getElementById('dailyAdsClaimBtn'); if(btn)btn.disabled=true;
+    try {
+        await flushPendingAdRewards(true);
+        if (Number(getPendingAdRewards().count || 0) > 0) {
+            throw new Error('ADS_SYNC_FAILED');
+        }
+        const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Yangon'}).format(new Date());
+        const adRef=db.collection('adWatches').doc(currentUser.uid+'_'+today);
+        const userRef=db.collection('users').doc(currentUser.uid);
+        const reward=getCurrentLevel().dailyReward;
+        await db.runTransaction(async tx=>{
+            const adSnap=await tx.get(adRef); const userSnap=await tx.get(userRef);
+            if(!userSnap.exists)throw new Error('USER_NOT_FOUND');
+            if (userSnap.data().isBanned === true) {
+                throw new Error('ACCOUNT_RESTRICTED');
+            }
+            const adData=adSnap.exists?adSnap.data():{};
+            if(Number(adData.count||0)<DAILY_AD_TARGET)throw new Error('ADS_NOT_ENOUGH');
+            if(adData.dailyRewardClaimed===true)throw new Error('ALREADY_CLAIMED');
+            tx.set(adRef,{dailyRewardClaimed:true,dailyRewardCoins:reward,dailyRewardClaimedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
+            tx.update(userRef,{coins:firebase.firestore.FieldValue.increment(reward)});
+            const txRef=db.collection('transactions').doc();
+            tx.set(txRef,{userId:currentUser.uid,type:'daily_ads_reward',amount:reward,description:`Daily ${DAILY_AD_TARGET} Ads Reward - LV${getCurrentLevel().level}`,timestamp:firebase.firestore.FieldValue.serverTimestamp()});
+        });
+        userData.coins=(Number(userData.coins)||0)+reward; saveCoinsToLocal(userData.coins); updateUI();
+        showCoinAnimation(reward,userData.coins); showToast(`🎉 +${reward.toLocaleString()} Coin ရရှိပါပြီ`,'success');
+        await refreshDailyAdsProgress();
+    } catch(e){
+        const msg=e.message==='ADS_NOT_ENOUGH'?'Ads 300 မပြည့်သေးပါ':e.message==='ALREADY_CLAIMED'?'ယနေ့ Reward ရယူပြီးပါပြီ':e.message==='ADS_SYNC_FAILED'?'Ads Sync မအောင်မြင်ပါ။ Internet စစ်ပြီး ပြန်ကြိုးစားပါ':e.message;
+        showToast('❌ '+msg,'error');
+        await refreshDailyAdsProgress();
+    } finally {if(btn)btn.disabled=false;}
+}
+
+async function refreshDailyAdsProgress(){
+    if(!currentUser)return;
+    try{
+        const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Yangon'}).format(new Date());
+        const snap=await db.collection('adWatches').doc(currentUser.uid+'_'+today).get();
+        dailyAdsToday=Number(snap.exists?snap.data().count:0)||0;
+        updateDailyAdsProgressUI(snap.exists&&snap.data().dailyRewardClaimed===true);
+    }catch(e){updateDailyAdsProgressUI();}
+}
+function updateDailyAdsProgressUI(claimed){
+    const count=Math.min(DAILY_AD_TARGET,Math.max(0,Number(dailyAdsToday)||0));
+    const pct=count/DAILY_AD_TARGET*100; const current=getCurrentLevel();
+    const label=document.getElementById('dailyAdsCountLabel'); if(label)label.textContent=`${count}/${DAILY_AD_TARGET}`;
+    const fill=document.getElementById('dailyAdsProgressFill'); if(fill)fill.style.width=pct+'%';
+    const reward=document.getElementById('dailyAdsRewardLabel'); if(reward)reward.textContent=`LV${current.level} Reward: ${current.dailyReward.toLocaleString()} Coin`;
+    const access = hasActiveAdAccess();
+    const btn=document.getElementById('dailyAdsClaimBtn');
+    if(btn){
+        btn.disabled=!access||!!claimed||count<DAILY_AD_TARGET;
+        btn.textContent=!access?'🔒 Access လိုအပ်သည်':claimed?'✅ Claimed':count>=DAILY_AD_TARGET?'🎁 Claim Coin':'🔒 Claim';
+        btn.style.background=claimed?'#0f9f72':access&&count>=DAILY_AD_TARGET?'linear-gradient(135deg,#27d7a1,#0f9f72)':'#6b7280';
+    }
+    const status=document.getElementById('dailyAdsClaimStatus');
+    if(status) status.textContent=!access?'🔒 Ads Free Access မရှိသေးပါ။':claimed?'ယနေ့ Daily Reward ရယူပြီးပါပြီ။ မနက်ဖြန် ပြန်စနိုင်ပါမည်。':`${Math.max(0,DAILY_AD_TARGET-count)} Ads ကျန်ပါသည်။`;
+}
+
+// ============================================================
+//  ACHIEVEMENTS
+// ============================================================
+function getAchProgress(ach) {
+    if (ach.type === 'ads') return userData.totalAds || 0;
+    if (ach.type === 'coins') return userData.coins || 0;
+    if (ach.type === 'refs') return userData.referralCount || 0;
+    return 0;
+}
+function updateAchievementsUI() {
+    const grid = document.getElementById('achGrid');
+    if (!grid) return;
+    let unclaimedCount = 0;
+    grid.innerHTML = ACHIEVEMENTS.map(ach => {
+        const progress = getAchProgress(ach);
+        const unlocked = progress >= ach.target;
+        const claimed = userData.claimedAch && userData.claimedAch.includes(ach.id);
+        const pct = Math.min((progress / ach.target) * 100, 100);
+        if (unlocked && !claimed) unclaimedCount++;
+        return `
+            <div class="ach-card ${unlocked ? 'unlocked' : 'locked'}" onclick="${unlocked && !claimed ? `claimAchievement('${ach.id}', ${ach.reward})` : ''}">
+                ${unlocked && !claimed ? '<div class="ach-claim-badge">NEW</div>' : ''}
+                <div class="ach-reward">+${ach.reward}</div>
+                <span class="ach-icon">${claimed ? '✅' : ach.icon}</span>
+                <div class="ach-title">${ach.title}</div>
+                <div class="ach-desc">${ach.desc}</div>
+                <div class="ach-progress"><div class="ach-progress-fill" style="width:${pct}%"></div></div>
+                <div style="font-size:8px;color:var(--text-3);margin-top:4px;">${Math.min(progress, ach.target)}/${ach.target}</div>
+            </div>
+        `;
+    }).join('');
+    const badge = document.getElementById('achBadge');
+    if (badge) {
+        if (unclaimedCount > 0) { badge.textContent = unclaimedCount; badge.style.display = 'flex'; }
+        else badge.style.display = 'none';
+    }
+    const drawerBadge = document.getElementById('drawerAchBadge');
+    if (drawerBadge) {
+        if (unclaimedCount > 0) { drawerBadge.textContent = unclaimedCount; drawerBadge.style.display = 'inline-block'; }
+        else drawerBadge.style.display = 'none';
+    }
+}
+async function claimAchievement(id, reward) {
+    if (!currentUser) return;
+    if (isAccountRestricted()) { showRestrictedNotice(); return; }
+    if (userData.claimedAch && userData.claimedAch.includes(id)) return;
+    const ach = ACHIEVEMENTS.find(a => a.id === id);
+    if (!ach || getAchProgress(ach) < ach.target) return;
+    if (!acquireCoinLock()) return;
+    try {
+        const newCoins = (userData.coins || 0) + reward;
+        userData.coins = newCoins;
+        userData.claimedAch = [...(userData.claimedAch || []), id];
+        saveCoinsToLocal(newCoins);
+        updateUI();
+        updateAchievementsUI();
+        try {
+            await db.collection('users').doc(currentUser.uid).update({
+                coins: firebase.firestore.FieldValue.increment(reward),
+                claimedAch: firebase.firestore.FieldValue.arrayUnion(id)
+            });
+            await db.collection('transactions').add({
+                userId: currentUser.uid, type: 'achievement', amount: reward,
+                description: `Achievement: ${ach.title}`,
+                timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            });
+        } catch (e) {}
+        showCoinAnimation(reward, newCoins);
+        showToast(`🏆 ${ach.title} +${reward} Coins!`, 'success');
+    } catch (e) { showToast('❌ Failed', 'error'); }
+    finally { setTimeout(() => releaseCoinLock(), 1500); }
+}
+
+// ============================================================
+//  REFERRAL
+// ============================================================
+function updateReferralUI() {
+    document.getElementById('myRefCode').textContent = userData.refCode || '------';
+    document.getElementById('refCount').textContent = userData.referralCount || 0;
+    document.getElementById('refEarned').textContent = userData.referralEarned || 0;
+    loadReferralList();
+}
+async function loadReferralList() {
+    if (!currentUser) return;
+    const container = document.getElementById('refList');
+    try {
+        const snap = await db.collection('users').where('referredBy', '==', userData.refCode).limit(20).get();
+        if (snap.empty) {
+            container.innerHTML = '<div class="ref-empty">No referrals yet</div>';
+            return;
+        }
+        let html = '';
+        snap.forEach(doc => {
+            const d = doc.data();
+            const date = d.createdAt?.seconds ? new Date(d.createdAt.seconds * 1000) : new Date();
+            html += `
+                <div class="ref-item">
+                    <div>
+                        <div class="ri-name">${d.username || 'User'}</div>
+                        <div class="ri-date">${date.toLocaleDateString()}</div>
+                    </div>
+                    <div class="ri-bonus">+${REFERRAL_BONUS}</div>
+                </div>
+            `;
+        });
+        container.innerHTML = html;
+    } catch (e) { container.innerHTML = '<div class="ref-empty">Error</div>'; }
+}
+function copyRefCode() {
+    const code = userData.refCode;
+    if (!code) return;
+    navigator.clipboard.writeText(code).then(() => {
+        showToast('📋 Copy ပြီးပါပြီ!', 'success');
+    }).catch(() => {
+        const ta = document.createElement('textarea');
+        ta.value = code;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        showToast('📋 Copy ပြီးပါပြီ!', 'success');
+    });
+}
+function shareReferral() {
+    const text = `💰 CASH TUBE Rewards မှာ Ads ကြည့်ပြီး Coins ရယူပါ!\n\n🎁 ကျွန်တော့်ရဲ့ Referral Code: ${userData.refCode}\n\n👉 ${window.location.origin}${window.location.pathname}?ref=${userData.refCode}`;
+    if (navigator.share) {
+        navigator.share({ title: 'CASH TUBE Rewards', text, url: window.location.href }).catch(() => {});
+    } else {
+        navigator.clipboard.writeText(text).then(() => showToast('📋 Copy ပြီးပါပြီ!', 'success'));
+    }
+}
+
+// ============================================================
+//  LEADERBOARD
+// ============================================================
+
+// Repair only the signed-in user's daily leaderboard from their own adWatches record.
+async function repairMyDailyLeaderboardCount(today) {
+    if (!currentUser || !today) return false;
+
+    const uid = currentUser.uid;
+    const cacheKey = 'cashtube_lb_repaired_v1_' + uid + '_' + today;
+
+    if (localStorage.getItem(cacheKey) === 'true') return true;
+
+    try {
+        const adRef = db.collection('adWatches').doc(uid + '_' + today);
+        const adSnap = await adRef.get();
+
+        if (!adSnap.exists) return false;
+
+        const adData = adSnap.data() || {};
+        const count = Number(adData.count || 0);
+        const totalCoins = Number(adData.totalCoins || 0);
+
+        if (!Number.isFinite(count) || count < 0) return false;
+
+        const lbRef = db.collection('publicLeaderboard').doc(uid + '_' + today);
+
+        await lbRef.set({
+            userId: uid,
+            username: (userData && userData.username) || adData.username || 'User',
+            date: today,
+            count: count,
+            totalCoins: Number.isFinite(totalCoins) ? totalCoins : 0,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+
+        localStorage.setItem(cacheKey, 'true');
+        console.log('DAILY LEADERBOARD REPAIRED:', count);
+        return true;
+    } catch (e) {
+        console.warn('DAILY LEADERBOARD REPAIR SKIPPED:', e.code || e.message);
+        return false;
+    }
+}
+
+async function loadLeaderboard(type = 'today') {
+    currentLeaderboardType = type;
+    const listEl = document.getElementById('lbList');
+    const podiumEl = document.getElementById('lbPodium');
+    listEl.innerHTML = '<div class="lb-loading"><i class="fas fa-spinner fa-spin"></i> Loading...</div>';
+    podiumEl.innerHTML = '<div class="lb-loading">Loading...</div>';
+    try {
+        let users = [];
+        if (type === 'today') {
+            const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Yangon' }).format(new Date());
+            await repairMyDailyLeaderboardCount(today);
+            const snap = await db.collection('publicLeaderboard').where('date', '==', today).get();
+            const records = [];
+            snap.forEach(doc => records.push({ userId: doc.data().userId, ...doc.data() }));
+            records.sort((a, b) => {
+                const countDiff = Number(b.count || 0) - Number(a.count || 0);
+                if (countDiff !== 0) return countDiff;
+                return Number(b.totalCoins || 0) - Number(a.totalCoins || 0);
+            });
+            const top = records.slice(0, 30);
+            // Use public leaderboard data directly.
+            // Avoid unauthorized reads from the private users collection.
+            users = top
+                .filter(r => r.userId)
+                .map(r => ({
+                    uid: r.userId,
+                    name: r.username || 'User',
+                    coins: Number(r.totalCoins || 0),
+                    ads: Number(r.count || 0),
+                    level: getLevelFromAds(Number(r.count || 0))
+                }));
+        } else {
+            const snap = await db.collection('users').orderBy('coins', 'desc').limit(30).get();
+            snap.forEach(doc => {
+                const d = doc.data();
+                users.push({
+                    uid: doc.id, name: d.username || 'User',
+                    coins: d.coins || 0, ads: d.totalAds || 0,
+                    level: getLevelFromAds(d.totalAds || 0)
+                });
+            });
+        }
+
+        if (users.length === 0) {
+            listEl.innerHTML = '<div class="lb-loading">No data yet</div>';
+            podiumEl.innerHTML = '<div class="lb-loading">No data yet</div>';
+            return;
+        }
+
+        const top3 = users.slice(0, 3);
+        let podiumHtml = '';
+        podiumHtml += top3[1] ? `
+            <div style="display:flex;flex-direction:column;align-items:center;gap:6px;flex:1;max-width:90px;">
+                <div style="width:50px;height:50px;border-radius:50%;background:linear-gradient(135deg,var(--blue-400),var(--blue-600));display:flex;align-items:center;justify-content:center;font-size:22px;border:3px solid var(--blue-300);">🥈</div>
+                <div style="font-size:10px;font-weight:700;text-align:center;color:var(--text-1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;">${top3[1].name}</div>
+                <div style="font-size:12px;font-weight:700;color:var(--blue-600);">${top3[1].ads.toLocaleString()} ads</div>
+            </div>` : '';
+        podiumHtml += top3[0] ? `
+            <div style="display:flex;flex-direction:column;align-items:center;gap:6px;flex:1;max-width:90px;">
+                <div style="font-size:24px;">👑</div>
+                <div style="width:62px;height:62px;border-radius:50%;background:linear-gradient(135deg,var(--mint-400),var(--mint-600));display:flex;align-items:center;justify-content:center;font-size:26px;border:3px solid var(--mint-300);box-shadow:0 8px 20px rgba(16,185,129,0.4);">🥇</div>
+                <div style="font-size:11px;font-weight:700;text-align:center;color:var(--text-1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;">${top3[0].name}</div>
+                <div style="font-size:13px;font-weight:700;color:var(--mint-600);">${top3[0].ads.toLocaleString()} ads</div>
+            </div>` : '';
+        podiumHtml += top3[2] ? `
+            <div style="display:flex;flex-direction:column;align-items:center;gap:6px;flex:1;max-width:90px;">
+                <div style="width:50px;height:50px;border-radius:50%;background:linear-gradient(135deg,var(--slate-400),var(--slate-600));display:flex;align-items:center;justify-content:center;font-size:22px;border:3px solid var(--slate-300);">🥉</div>
+                <div style="font-size:10px;font-weight:700;text-align:center;color:var(--text-1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;">${top3[2].name}</div>
+                <div style="font-size:12px;font-weight:700;color:var(--slate-600);">${top3[2].ads.toLocaleString()} ads</div>
+            </div>` : '';
+        podiumEl.innerHTML = podiumHtml;
+
+        const myUid = currentUser?.uid;
+        let listHtml = '';
+        users.forEach((u, i) => {
+            const rank = i + 1;
+            const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : rank;
+            const isMe = u.uid === myUid;
+            listHtml += `
+                <div class="lb-row ${isMe ? 'is-me' : ''} ${rank <= 3 ? 'rank-' + rank : ''}">
+                    <div class="lb-rank">${medal}</div>
+                    <div class="lb-avatar">${(u.name || 'U')[0].toUpperCase()}</div>
+                    <div class="lb-info">
+                        <div class="lb-name">${u.name}${isMe ? ' (You)' : ''}</div>
+                        <div class="lb-level">Lv.${u.level} • ${u.ads} ads</div>
+                    </div>
+                    <div class="lb-value">
+                        ${u.coins.toLocaleString()}
+                        <span class="lb-label">COINS</span>
+                    </div>
+                </div>
+            `;
+        });
+        listEl.innerHTML = listHtml;
+    } catch (err) {
+        console.error('Leaderboard error:', err);
+        listEl.innerHTML = '<div class="lb-loading" style="color:var(--rose-500);">Error loading</div>';
+    }
+}
+function switchLeaderboard(type, el) {
+    document.querySelectorAll('.lb-tab').forEach(t => t.classList.remove('active'));
+    if (el) el.classList.add('active');
+    loadLeaderboard(type);
+}
+
+// ============================================================
+//  AD CARDS
+// ============================================================
+function renderAdCards() {
+    const container = document.getElementById('adGrid');
+    if (!container) return;
+    container.innerHTML = '';
+
+    if (!hasActiveAdAccess()) {
+        container.innerHTML = `
+            <div style="width:100%;padding:24px 16px;text-align:center;">
+                <div style="font-size:38px;">🔒</div>
+                <div style="font-size:17px;font-weight:800;margin:10px 0;">Ads Access Locked</div>
+                <div style="font-size:13px;opacity:.8;">
+                    VIP Package ဝယ်ယူပြီး Admin အတည်ပြုမှ Ads Access ရရှိပါမည်။
+                </div>
+                ${getAdAccessRequestPanelHtml()}
+                ${getPurchaseCenterHtml()}
+            </div>`;
+        renderAdAccessPaymentDestination();
+        return;
+    }
+
+    const renewalPanel = document.createElement('div');
+    renewalPanel.style.width = '100%';
+    renewalPanel.innerHTML = getAdAccessRequestPanelHtml();
+    container.appendChild(renewalPanel);
+    renderAdAccessPaymentDestination();
+
+    const banner = document.createElement('div');
+    banner.id = 'adAccessCountdown';
+    banner.style.cssText = 'width:100%;padding:10px;margin-bottom:10px;text-align:center;font-size:12px;border-radius:10px;';
+    container.appendChild(banner);
+    updateAdAccessCountdownText();
+
+    container.insertAdjacentHTML('beforeend', getPurchaseCenterHtml());
+
+    AD_CARDS.forEach((card) => {
+        const lastClaimKey = 'adClaim_' + card.id + '_' + (currentUser?.uid || 'guest');
+        const lastClaim = parseInt(localStorage.getItem(lastClaimKey) || '0');
+        const now = Date.now();
+        const remaining = COOLDOWN - (now - lastClaim);
+        const isCooldown = lastClaim > 0 && remaining > 0;
+        const cardEl = document.createElement('div');
+        cardEl.className = 'ad-card ' + (isCooldown ? 'cooldown' : 'available');
+        const btnClass = card.type === 'watch' ? 'watch' : 'download';
+        const btnIcon = card.type === 'watch' ? 'fa-play' : 'fa-download';
+        const btnText = card.type === 'watch' ? (currentLang === 'my' ? 'ကြည့်မည်' : 'Watch') : (currentLang === 'my' ? 'ဒေါင်းလုဒ်' : 'Download');
+        cardEl.innerHTML = `
+            <span class="ad-icon">${card.icon}</span>
+            <div class="ad-title">${card.title}</div>
+            <div class="ad-reward"><span class="ad-amount">+1</span><span class="ad-coin"> Ad Count</span></div>
+            <button class="ad-btn ${btnClass}" ${isCooldown ? 'disabled' : ''} onclick="startAdTask('${card.id}')"><i class="fas ${btnIcon}"></i> ${btnText}</button>
+            <div class="ad-cd" id="cooldown_${card.id}">${isCooldown ? formatTime(remaining) + (currentLang === 'my' ? ' စောင့်ပါ' : ' wait') : ''}</div>
+        `;
+        container.appendChild(cardEl);
+        if (isCooldown) startCardCooldownTimer(card.id, remaining);
+    });
+}
+function formatTime(ms) {
+    const m = Math.floor(ms / 60000);
+    const s = Math.floor((ms % 60000) / 1000);
+    return m + ':' + String(s).padStart(2, '0');
+}
+function startCardCooldownTimer(cardId, remaining) {
+    if (adCardTimers[cardId]) clearInterval(adCardTimers[cardId]);
+    adCardTimers[cardId] = setInterval(() => {
+        remaining -= 1000;
+        if (remaining <= 0) { clearInterval(adCardTimers[cardId]); delete adCardTimers[cardId]; renderAdCards(); return; }
+        const el = document.getElementById('cooldown_' + cardId);
+        if (el) el.textContent = formatTime(remaining) + (currentLang === 'my' ? ' စောင့်ပါ' : ' wait');
+    }, 1000);
+}
+
+// ============================================================
+//  START AD
+// ============================================================
+function startAdTask(cardId) {
+    if (!currentUser) { showToast('❌ Please login', 'error'); return; }
+    if (!hasActiveAdAccess()) {
+        showToast('🔒 Ads Free Access မရှိသေးပါ။', 'error');
+        renderAdCards();
+        return;
+    }
+    if (isAdPlaying) { showToast('⏳ Ad ကနေဆဲ', 'warning'); return; }
+    const card = AD_CARDS.find(c => c.id === cardId);
+    if (!card) return;
+
+    const rotationIndex = adLinks.length > 0 ? ((Number(userData.totalAds) || 0) % adLinks.length) : 0;
+    let adUrl = card.type === 'watch' ? (adLinks[rotationIndex] || appLinks[0] || '') : (appLinks[0] || adLinks[rotationIndex] || '');
+    if (!adUrl) { showToast('❌ Link မရှိ', 'error'); return; }
+    if (!adUrl.startsWith('http')) adUrl = 'https://' + adUrl;
+
+    // Open the ad website directly in a new browser tab/window.
+    // No iframe is used, so ad networks can load normally without iframe restrictions.
+    let adWindow = null;
+    try { adWindow = window.open(adUrl, '_blank'); } catch (e) {}
+    if (!adWindow) {
+        showToast('⚠️ Browser က Ad ဖွင့်ခွင့်ပိတ်ထားပါတယ်။ Allow pop-ups လုပ်ပြီး ပြန်နှိပ်ပါ။', 'warning');
+        return;
+    }
+    try { adWindow.focus(); } catch (e) {}
+
+    currentAdCard = card;
+    isAdPlaying = true;
+
+    const adPage = document.getElementById('adPage');
+    const mainContainer = document.getElementById('appContainer');
+    if (mainContainer) mainContainer.style.display = 'none';
+    if (adPage) adPage.classList.add('show');
+
+    const loading = document.getElementById('adPageLoading');
+    const progressBar = document.getElementById('adPageProgress');
+    const timerEl = document.getElementById('adPageTimer');
+    const claimBtn = document.getElementById('adPageClaimBtn');
+
+    if (loading) {
+        loading.style.display = 'flex';
+        loading.innerHTML = '<i class="fas fa-external-link-alt"></i><p>Ad website ကို Browser မှာ ဖွင့်ထားပါတယ်</p>';
+    }
+    if (progressBar) progressBar.style.width = '0%';
+    if (timerEl) timerEl.textContent = AD_DURATION;
+    if (claimBtn) {
+        claimBtn.disabled = true;
+        claimBtn.className = 'ad-page-claim-btn';
+        claimBtn.innerHTML = `⏳ ${AD_DURATION}s ပြည့်ရင် Coin ရမည်...`;
+    }
+
+    let isClaimed = false;
+    const startTime = Date.now();
+    if (adPageInterval) clearInterval(adPageInterval);
+
+    adPageInterval = setInterval(() => {
+        const elapsed = Math.floor((Date.now() - startTime) / 1000);
+        const timeLeft = Math.max(AD_DURATION - elapsed, 0);
+        const progressPercent = Math.min((elapsed / AD_DURATION) * 100, 100);
+        if (progressBar) progressBar.style.width = progressPercent + '%';
+        if (timerEl) timerEl.textContent = timeLeft;
+
+        if (timeLeft <= 0) {
+            clearInterval(adPageInterval);
+            adPageInterval = null;
+            if (progressBar) progressBar.style.width = '100%';
+            if (loading) loading.style.display = 'none';
+
+            if (card.type === 'watch') {
+                if (claimBtn) {
+                    claimBtn.disabled = false;
+                    claimBtn.className = 'ad-page-claim-btn active';
+                    claimBtn.innerHTML = `✅ Complete Ad`;
+                }
+                setTimeout(() => {
+                    if (!isClaimed) {
+                        isClaimed = true;
+                        claimAdReward();
+                    }
+                }, 500);
+            } else {
+                if (claimBtn) {
+                    claimBtn.disabled = false;
+                    claimBtn.className = 'ad-page-claim-btn active';
+                    claimBtn.innerHTML = `✅ Complete Ad`;
+                    claimBtn.onclick = function () {
+                        if (isClaimed) return;
+                        isClaimed = true;
+                        claimBtn.disabled = true;
+                        claimBtn.innerHTML = '⏳ Adding...';
+                        claimAdReward();
+                    };
+                }
+            }
+        }
+    }, 250);
+}
+
+function closeAdPageAndReturn() {
+    if (adPageInterval) { clearInterval(adPageInterval); adPageInterval = null; }
+    const adPage = document.getElementById('adPage');
+    if (adPage) adPage.classList.remove('show');
+    const mainContainer = document.getElementById('appContainer');
+    if (mainContainer) mainContainer.style.display = 'flex';
+    isAdPlaying = false;
+    currentAdCard = null;
+    const progressBar = document.getElementById('adPageProgress');
+    if (progressBar) progressBar.style.width = '0%';
+    const timerEl = document.getElementById('adPageTimer');
+    if (timerEl) timerEl.textContent = AD_DURATION;
+}
+
+async function claimAdReward() {
+    if (isAccountRestricted()) { closeAdPageAndReturn(); showRestrictedNotice(); return; }
+    if (!currentUser || !currentAdCard) return;
+    if (!hasActiveAdAccess()) {
+        closeAdPageAndReturn();
+        showToast('🔒 Ads Access သက်တမ်းကုန်ဆုံးပါပြီ။', 'error');
+        renderAdCards();
+        return;
+    }
+    if (dailyAdsToday >= DAILY_AD_TARGET) {
+        closeAdPageAndReturn();
+        showToast('Daily Ads Limit ပြည့်ပါပြီ', 'warning');
+        return;
+    }
+    if (!acquireCoinLock()) { showToast('⏳ Please wait', 'warning'); return; }
+    try {
+        const reward = 0;
+        const newAds = (userData.totalAds || 0) + 1;
+        userData.totalAds = newAds;
+        dailyAdsToday += 1;
+        updateUI();
+        updateLevelUI();
+        updateAchievementsUI();
+
+        // Queue the Firestore writes. One batch is committed every few ads.
+        const pending = getPendingAdRewards();
+        pending.count += 1;
+        pending.coins += 0;
+        pending.lastTitle = currentAdCard.title || 'Ad Watch';
+        setPendingAdRewards(pending);
+
+        const flushed = await flushPendingAdRewards(false);
+        localStorage.setItem('adClaim_' + currentAdCard.id + '_' + currentUser.uid, Date.now().toString());
+        closeAdPageAndReturn();
+        renderAdCards();
+        updateDailyAdsProgressUI();
+        showToast(`✅ Ads ${dailyAdsToday}/${DAILY_AD_TARGET} မှတ်တမ်းတင်ပြီးပါပြီ`, 'success');
+        if (flushed) loadDashboard();
+    } catch (error) {
+        showToast('❌ Failed', 'error');
+        closeAdPageAndReturn();
+    } finally {
+        setTimeout(() => releaseCoinLock(), 300);
+    }
+}
+
+async function saveAdWatchRecord(reward) {
+    // Legacy compatibility: ad views now count toward the daily 200 target.
+    const pending = getPendingAdRewards();
+    pending.count += 1;
+    pending.coins += 0;
+    setPendingAdRewards(pending);
+    return await flushPendingAdRewards(false);
+}
+
+// ============================================================
+//  DASHBOARD
+// ============================================================
+async function loadDashboard() {
+    if (!currentUser) return;
+    const topCard = document.getElementById('topViewerCard');
+    const historyList = document.getElementById('adHistoryList');
+    topCard.innerHTML = '<div class="dtt-loading"><i class="fas fa-spinner fa-spin"></i> Loading...</div>';
+    historyList.innerHTML = '<div class="dlt-loading">Loading...</div>';
+    try {
+        const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Yangon' }).format(new Date());
+        await repairMyDailyLeaderboardCount(today);
+        const snapshot = await db.collection('publicLeaderboard').where('date', '==', today).get();
+        const records = [];
+        snapshot.forEach(doc => records.push({ id: doc.id, ...doc.data() }));
+
+        if (records.length === 0) {
+            topCard.innerHTML = '<div class="dtt-loading">🎯 ဒီနေ့ ဘယ်သူမှ မကြည့်ရသေးပါ</div>';
+            historyList.innerHTML = '<div class="dlt-loading">No records yet</div>';
+            return;
+        }
+
+        // Rank everyone by today's ad count: highest first.
+        records.sort((a, b) => {
+            const countDiff = Number(b.count || 0) - Number(a.count || 0);
+            if (countDiff !== 0) return countDiff;
+            return String(a.username || a.email || '').localeCompare(String(b.username || b.email || ''));
+        });
+        const myRecord = records.find(r => r.userId === currentUser.uid);
+        const myCount = myRecord ? (myRecord.count || 0) : 0;
+        const top = records[0];
+        const isMeTop = top.userId === currentUser.uid;
+        const progressPercent = Math.min((myCount / TOP_BONUS_TARGET) * 100, 100);
+        const isComplete = myCount >= TOP_BONUS_TARGET;
+        const bonusClaimedKey = 'topBonusClaimed_' + today + '_' + currentUser.uid;
+        const bonusClaimed = localStorage.getItem(bonusClaimedKey) === 'true';
+
+        let claimBtnHtml = '';
+        if (isComplete && isMeTop && !bonusClaimed) {
+            claimBtnHtml = `<button style="width:100%;padding:12px;border:none;border-radius:12px;background:linear-gradient(135deg,var(--mint-500),var(--mint-700));color:#fff;font-weight:700;font-size:13px;cursor:pointer;box-shadow:0 6px 20px rgba(16,185,129,0.4);margin-top:12px;display:flex;align-items:center;justify-content:center;gap:8px;" onclick="claimTopBonus(${TOP_BONUS})"><i class="fas fa-crown"></i> Bonus +${TOP_BONUS} Coins</button>`;
+        } else if (bonusClaimed) {
+            claimBtnHtml = `<div style="text-align:center;padding:12px;color:var(--mint-600);font-size:13px;font-weight:700;">✅ Bonus ရယူပြီးပါပြီ</div>`;
+        } else if (isComplete && !isMeTop) {
+            claimBtnHtml = `<button style="width:100%;padding:12px;border:none;border-radius:12px;background:var(--slate-200);color:var(--text-3);font-weight:700;font-size:13px;cursor:not-allowed;margin-top:12px;display:flex;align-items:center;justify-content:center;gap:8px;" disabled><i class="fas fa-lock"></i> Top 1 ဖြစ်မှ Bonus ရယူနိုင်ပါမည်</button>`;
+        } else {
+            claimBtnHtml = `<button style="width:100%;padding:12px;border:none;border-radius:12px;background:var(--slate-200);color:var(--text-3);font-weight:700;font-size:13px;cursor:not-allowed;margin-top:12px;display:flex;align-items:center;justify-content:center;gap:8px;" disabled><i class="fas fa-lock"></i> Ad ${TOP_BONUS_TARGET} ခု ကြည့်ပါ (${myCount}/${TOP_BONUS_TARGET})</button>`;
+        }
+
+        topCard.innerHTML = `
+            <div style="display:flex;align-items:center;gap:12px;">
+                <div style="font-size:32px;">🥇</div>
+                <div style="flex:1;min-width:0;">
+                    <div style="font-size:14px;font-weight:700;color:var(--text-1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${top.username || 'User'}${isMeTop ? ' (You)' : ''}</div>
+                    <div style="font-size:11px;color:var(--text-2);margin-top:2px;">👁️ ${top.count || 0} ads • 🪙 ${top.totalCoins || 0}</div>
+                </div>
+                <div style="background:var(--blue-500);color:#fff;padding:4px 12px;border-radius:999px;font-size:9px;font-weight:700;">TOP</div>
+            </div>
+            <div style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(59,130,246,0.15);">
+                <div style="display:flex;justify-content:space-between;margin-bottom:8px;font-size:11px;font-weight:700;">
+                    <span style="color:var(--text-2);">🎯 Progress</span>
+                    <span style="color:var(--blue-600);">${myCount}/${TOP_BONUS_TARGET}</span>
+                </div>
+                <div style="width:100%;height:8px;background:var(--slate-200);border-radius:8px;overflow:hidden;">
+                    <div style="height:100%;width:${progressPercent}%;background:linear-gradient(90deg,var(--blue-500),var(--mint-500));border-radius:8px;transition:width 0.6s;"></div>
+                </div>
+            </div>
+        `;
+        const btnWrapper = document.createElement('div');
+        btnWrapper.innerHTML = claimBtnHtml;
+        topCard.appendChild(btnWrapper.firstElementChild);
+
+        // Show ALL today's ad viewers ranked by ad count.
+        // Highest ad count = Rank 1.
+        let historyHtml = '';
+        records.forEach((r, i) => {
+            const rank = i + 1;
+            const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : rank + '.';
+            const isMe = r.userId === currentUser.uid;
+            const isTop = rank === 1;
+            historyHtml += `
+                <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:${isTop ? 'linear-gradient(135deg,var(--mint-50),var(--blue-50))' : 'var(--slate-50)'};border-radius:12px;border:1px solid ${isTop ? 'var(--mint-300)' : 'var(--border-light)'};font-size:12px;">
+                    <div style="font-weight:800;width:28px;text-align:center;color:${isTop ? 'var(--mint-600)' : 'var(--text-3)'};font-size:${rank <= 3 ? '18px' : '12px'};">${medal}</div>
+                    <div style="flex:1;min-width:0;">
+                        <div style="font-weight:700;color:var(--text-1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                            ${r.username || 'User'}${isMe ? ' (You)' : ''}
+                        </div>
+                    </div>
+                    <div style="background:var(--blue-500);color:#fff;padding:4px 10px;border-radius:999px;font-weight:800;font-size:10px;white-space:nowrap;">
+                        ${r.count || 0} ads
+                    </div>
+                </div>
+            `;
+        });
+        historyList.innerHTML = historyHtml;
+    } catch (err) {
+        topCard.innerHTML = '<div class="dtt-loading">❌ Error</div>';
+        historyList.innerHTML = '<div class="dlt-loading">No records</div>';
+    }
+}
+
+async function claimTopBonus(amount) {
+    if (isAccountRestricted()) { showRestrictedNotice(); return; }
+    if (!currentUser) return;
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Yangon' }).format(new Date());
+    const claimedKey = 'topBonusClaimed_' + today + '_' + currentUser.uid;
+    if (localStorage.getItem(claimedKey) === 'true') { showToast('❌ ရယူပြီးပါပြီ', 'error'); return; }
+    if (!acquireCoinLock()) return;
+    try {
+        const newCoins = (userData.coins || 0) + amount;
+        userData.coins = newCoins;
+        saveCoinsToLocal(newCoins);
+        updateUI();
+        try {
+            await db.collection('users').doc(currentUser.uid).update({ coins: firebase.firestore.FieldValue.increment(amount) });
+            await db.collection('transactions').add({ userId: currentUser.uid, type: 'top_viewer_bonus', amount, description: `Top Viewer Bonus`, timestamp: firebase.firestore.FieldValue.serverTimestamp() });
+        } catch (e) {}
+        localStorage.setItem(claimedKey, 'true');
+        showCoinAnimation(amount, newCoins);
+        showToast(`🎉 +${amount} Coins!`, 'success');
+        loadDashboard();
+    } catch (e) {}
+    finally { setTimeout(() => releaseCoinLock(), 1500); }
+}
+
+// ============================================================
+//  DAILY BONUS
+// ============================================================
+function updateDailyBonusUI() {
+    const btn = document.getElementById('dailyBonusBtn');
+    const cdEl = document.getElementById('dailyBonusCooldown');
+    if (!btn || !currentUser) return;
+    const lastClaimKey = 'dailyBonus_' + currentUser.uid;
+    const lastClaim = parseInt(localStorage.getItem(lastClaimKey) || '0');
+    const now = Date.now();
+    const ONE_DAY = 24 * 60 * 60 * 1000;
+    const remaining = ONE_DAY - (now - lastClaim);
+    if (lastClaim > 0 && remaining > 0) {
+        btn.disabled = true;
+        const h = Math.floor(remaining / 3600000);
+        const m = Math.floor((remaining % 3600000) / 60000);
+        cdEl.textContent = `⏳ ${h}h ${m}m wait`;
+    } else { btn.disabled = false; cdEl.textContent = ''; }
+}
+
+async function claimDailyBonus() {
+    if (isAccountRestricted()) { showRestrictedNotice(); return; }
+    if (!currentUser) { showToast('❌ Please login', 'error'); return; }
+    const lastClaimKey = 'dailyBonus_' + currentUser.uid;
+    const lastClaim = parseInt(localStorage.getItem(lastClaimKey) || '0');
+    const now = Date.now();
+    const ONE_DAY = 24 * 60 * 60 * 1000;
+    if (lastClaim > 0 && (now - lastClaim) < ONE_DAY) { showToast('❌ ရယူပြီးပါပြီ', 'error'); return; }
+    if (!acquireCoinLock()) return;
+    try {
+        const reward = 100;
+        userData.coins += reward;
+        saveCoinsToLocal(userData.coins);
+        updateUI();
+        try {
+            await db.collection('users').doc(currentUser.uid).update({ coins: firebase.firestore.FieldValue.increment(reward) });
+            await db.collection('transactions').add({ userId: currentUser.uid, type: 'daily_bonus', amount: reward, description: 'Daily Bonus', timestamp: firebase.firestore.FieldValue.serverTimestamp() });
+        } catch (e) {}
+        localStorage.setItem(lastClaimKey, now.toString());
+        updateDailyBonusUI();
+        showCoinAnimation(reward, userData.coins);
+        showToast('🎁 +100 Coins!', 'success');
+    } catch (e) {}
+    finally { releaseCoinLock(); }
+}
+
+// ============================================================
+//  UI UPDATE
+// ============================================================
+function updateUI() {
+    userData.profileFrames = Array.isArray(userData.profileFrames) ? userData.profileFrames : [];
+    userData.profileFrame = userData.profileFrame || 'none';
+    const coins = userData.coins || 0;
+    const mmk = Math.max(0, Number(userData.mmkBalance || 0));
+    const username = userData.username || 'User';
+    document.getElementById('totalCoins').textContent = coins;
+    if (document.getElementById('profileCoins')) document.getElementById('profileCoins').textContent = coins;
+    if (document.getElementById('profileUsdt')) document.getElementById('profileUsdt').textContent = mmk.toLocaleString() + ' MMK';
+    if (document.getElementById('profileName')) document.getElementById('profileName').value = username;
+    if (document.getElementById('profileEmail')) document.getElementById('profileEmail').value = userData.email || '';
+    document.getElementById('marketUsdt').textContent = mmk.toLocaleString() + ' MMK';
+    document.getElementById('exchangeCoins').textContent = coins;
+    document.getElementById('headerUsdt').textContent = mmk.toLocaleString() + ' MMK';
+    const wb = document.getElementById('withdrawBalanceMmk');
+    if (wb) wb.textContent = mmk.toLocaleString() + ' MMK';
+
+    const avatar = 'https://ui-avatars.com/api/?name=' + encodeURIComponent(username) + '&background=3b82f6&color=fff&size=72';
+    const savedImg = localStorage.getItem('profileImg');
+    const profileSrc = savedImg || avatar;
+    if (document.getElementById('profileImg')) document.getElementById('profileImg').src = profileSrc;
+    if (document.getElementById('headerAvatar')) document.getElementById('headerAvatar').src = profileSrc;
+    if (document.getElementById('drawerAvatar')) document.getElementById('drawerAvatar').src = profileSrc;
+    applyProfileFrame(userData.profileFrame || 'none');
+    if (document.getElementById('frameShopCoins')) document.getElementById('frameShopCoins').textContent = coins;
+    renderFrameShop();
+    if (document.getElementById('drawerUsername')) document.getElementById('drawerUsername').textContent = username;
+    if (document.getElementById('drawerEmail')) document.getElementById('drawerEmail').textContent = userData.email || 'user@email.com';
+    if (document.getElementById('drawerCoins')) document.getElementById('drawerCoins').textContent = coins;
+    if (document.getElementById('drawerUsdt')) document.getElementById('drawerUsdt').textContent = mmk.toLocaleString() + ' MMK';
+    if (document.getElementById('headerLevel')) document.getElementById('headerLevel').textContent = `Lv.${getCurrentLevel().level} • Online`;
+
+    updateWithdrawUI();
+    updateExchangeRateUI();
+    updateExchangeStatusUI();
+    updateLevelUI();
+    updateAchievementsUI();
+    updateReferralUI();
+}
+
+function updateWithdrawUI() {
+    const statusEl = document.getElementById('withdrawStatus');
+    const btn = document.getElementById('withdrawBtn');
+    if (!statusEl || !btn) return;
+
+    if (isWithdrawOpen) {
+        statusEl.textContent = '✅ Open';
+        statusEl.style.color = 'var(--mint-600)';
+    } else {
+        statusEl.textContent = '🔒 Locked';
+        statusEl.style.color = 'var(--rose-500)';
+    }
+
+    // Keep Withdraw button clickable.
+    // requestWithdraw() will check whether Withdraw is open.
+    btn.disabled = false;
+    btn.style.opacity = '1';
+    btn.style.pointerEvents = 'auto';
+}
+
+// ============================================================
+//  EXCHANGE
+// ============================================================
+async function loadExchangeRate() {
+    const cacheKey = 'cachedExchangeRate';
+    const TTL = 5 * 60 * 1000;
+    try {
+        const cached = JSON.parse(localStorage.getItem(cacheKey) || 'null');
+        if (cached && Date.now() - cached.timestamp < TTL) {
+            exchangeRate = cached.rate || 3000;
+            mmkRate = cached.mmkRate || 0;
+            coinMmkRate = Number(cached.coinMmkRate) || ((mmkRate > 0 && exchangeRate > 0) ? (mmkRate / exchangeRate) * 10000 : 0);
+            isExchangeOpen = cached.isExchangeOpen !== false;
+            exchangeOpenDate = cached.openDate || null;
+            AD_REWARD = 0;
+            VIDEO_REWARD = AD_REWARD;
+            AD_CARDS.forEach(c => c.reward = AD_REWARD);
+            updateExchangeRateUI();
+            updateExchangeStatusUI();
+            updateAdRewardUI();
+            try {
+                const w = await db.collection('settings').doc('withdrawControl').get();
+                if (w.exists && typeof w.data().isOpen === 'boolean') isWithdrawOpen = w.data().isOpen;
+                localStorage.setItem('isWithdrawOpen', isWithdrawOpen);
+            } catch (e) {}
+            return;
+        }
+    } catch (e) {}
+
+    try {
+        const doc = await db.collection('settings').doc('exchangeRate').get();
+        if (doc.exists) {
+            const data = doc.data();
+            exchangeRate = data.rate || 3000;
+            mmkRate = data.mmkRate || 0;
+            coinMmkRate = Number(data.coinMmkRate) || ((mmkRate > 0 && exchangeRate > 0) ? (mmkRate / exchangeRate) * 10000 : 0);
+            isExchangeOpen = data.isExchangeOpen !== false;
+        exchangeOpenDate = data.openDate || null;
+            AD_REWARD = 0;
+            VIDEO_REWARD = AD_REWARD;
+            localStorage.setItem(cacheKey, JSON.stringify({
+                rate: exchangeRate, mmkRate, coinMmkRate, isExchangeOpen, openDate: exchangeOpenDate, adReward: AD_REWARD, timestamp: Date.now()
+            }));
+        } else {
+            await db.collection('settings').doc('exchangeRate').set({
+                rate: 3000, mmkRate: 0, coinMmkRate: 0, isExchangeOpen: true, adReward: 0,
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
+            AD_REWARD = 0;
+            VIDEO_REWARD = 0;
+        }
+    } catch (e) {
+        exchangeRate = 3000; mmkRate = 0; coinMmkRate = 0; isExchangeOpen = true; AD_REWARD = 0; VIDEO_REWARD = 0;
+    }
+    AD_CARDS.forEach(c => c.reward = AD_REWARD);
+    updateExchangeRateUI();
+    updateExchangeStatusUI();
+    updateAdRewardUI();
+    try {
+        const w = await db.collection('settings').doc('withdrawControl').get();
+        if (w.exists && typeof w.data().isOpen === 'boolean') isWithdrawOpen = w.data().isOpen;
+        localStorage.setItem('isWithdrawOpen', isWithdrawOpen);
+    } catch (e) {}
+}
+
+function updateExchangeRateUI() {
+    const directRate = Number(coinMmkRate) || 0;
+    const display = directRate > 0 ? directRate.toLocaleString() + ' MMK / 10,000 Coins' : '--- MMK / 10,000 Coins';
+    const perCoin = directRate > 0 ? (directRate / 10000) : 0;
+    const el1 = document.getElementById('marketRate');
+    const el2 = document.getElementById('exchangeRateDisplay');
+    const el3 = document.getElementById('currentRateDisplay');
+    const el4 = document.getElementById('marketMmkRate');
+    const el5 = document.getElementById('currentMmkRateDisplay');
+    const el6 = document.getElementById('currentCoinMmkRateDisplay');
+    if (el1) el1.textContent = display;
+    if (el2) el2.textContent = display;
+    if (el3) el3.textContent = directRate > 0 ? directRate.toLocaleString() : '---';
+    if (el4) el4.textContent = directRate > 0 ? '1 Coin = ' + perCoin.toLocaleString(undefined, {maximumFractionDigits: 4}) + ' MMK' : '1 Coin = --- MMK';
+    if (el5) el5.textContent = directRate > 0 ? directRate.toLocaleString() : '---';
+    if (el6) el6.textContent = directRate > 0 ? directRate.toLocaleString() : '---';
+    const adminCoinMmk = document.getElementById('adminCoinMmkRate');
+    if (adminCoinMmk) adminCoinMmk.value = directRate > 0 ? directRate : '';
+}
+
+function isExchangeDateOpen() {
+    if (!exchangeOpenDate) return true;
+
+    const today = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Yangon'
+    }).format(new Date());
+
+    return today >= exchangeOpenDate;
+}
+
+async function adminSetExchangeDate() {
+    const date = document.getElementById('adminExchangeDate').value;
+    if (!date) return;
+
+    exchangeOpenDate = date;
+    isExchangeOpen = true;
+
+    try {
+        await db.collection('settings').doc('exchangeRate').set({
+            openDate: date,
+            rate: exchangeRate,
+            mmkRate,
+            coinMmkRate,
+            isExchangeOpen,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+
+        localStorage.removeItem('cachedExchangeRate');
+
+        const display = document.getElementById('currentExchangeDateDisplay');
+        if (display) display.textContent = date;
+
+        updateExchangeStatusUI();
+        showToast('✅ Exchange Date Set: ' + date);
+    } catch (e) {
+        console.error('adminSetExchangeDate:', e);
+        showToast('❌ Exchange Date Save Failed', 'error');
+    }
+}
+
+function updateExchangeStatusUI() {
+    const statusDisplay = document.getElementById('exchangeStatusDisplay');
+    const dateInput = document.getElementById('adminExchangeDate');
+    const dateDisplay = document.getElementById('currentExchangeDateDisplay');
+    if (dateInput && exchangeOpenDate) dateInput.value = exchangeOpenDate;
+    if (dateDisplay) dateDisplay.textContent = exchangeOpenDate || '---';
+
+    const toggleBtn = document.getElementById('toggleExchangeBtn');
+    const lockedMsg = document.getElementById('exchangeLockedMsg');
+    const lockedNotice = document.getElementById('exchangeLockedNotice');
+    const confirmBtn = document.getElementById('exchangeConfirmBtn');
+    const exchangeActuallyOpen = isExchangeOpen && isExchangeDateOpen();
+
+    if (exchangeActuallyOpen) {
+        if (statusDisplay) { statusDisplay.textContent = 'OPEN'; statusDisplay.style.color = 'var(--mint-600)'; }
+        if (toggleBtn) { toggleBtn.textContent = '🔓 Exchange Open'; toggleBtn.style.background = 'linear-gradient(135deg, var(--mint-500), var(--mint-700))'; toggleBtn.style.color = '#fff'; }
+        if (lockedMsg) lockedMsg.classList.remove('show');
+        if (lockedNotice) lockedNotice.classList.remove('show');
+        if (confirmBtn) confirmBtn.disabled = false;
+    } else {
+        if (statusDisplay) { statusDisplay.textContent = 'CLOSED'; statusDisplay.style.color = 'var(--rose-500)'; }
+        if (toggleBtn) { toggleBtn.textContent = '🔒 Exchange Closed'; toggleBtn.style.background = 'linear-gradient(135deg, var(--rose-500), var(--rose-600))'; toggleBtn.style.color = '#fff'; }
+        if (lockedMsg) lockedMsg.classList.add('show');
+        if (lockedNotice) lockedNotice.classList.add('show');
+        if (confirmBtn) confirmBtn.disabled = true;
+    }
+}
+
+function updateAdRewardUI() {
+    const d = document.getElementById('currentAdRewardDisplay');
+    const input = document.getElementById('adminAdReward');
+    if (d) d.textContent = AD_REWARD;
+    if (input && isAdmin) input.value = AD_REWARD;
+}
+async function adminSetAdReward() {
+    AD_REWARD = 0; VIDEO_REWARD = 0;
+    AD_CARDS.forEach(c => c.reward = 0);
+    showToast('တစ်ပုဒ်ချင်း Coin Reward ကို ပိတ်ထားသည်။ Daily 300 Ads Claim စနစ်ကို အသုံးပြုပါ။','warning');
+    updateAdRewardUI(); renderAdCards();
+}
+
+async function adminSetRefCode() {
+    const code = document.getElementById('adminRefCodeManage').value.trim().toUpperCase();
+    if (!code || code.length < 6) { showToast('Referral Code အနည်းဆုံး ၆ လုံးလိုသည်', 'error'); return; }
+    await db.collection('settings').doc('adminAccess').set({
+        refCode: code,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+    showToast('✅ Admin Referral Code ပြောင်းပြီးပါပြီ');
+}
+async function adminSetCoinMmkRate() {
+    const rate = Number(document.getElementById('adminCoinMmkRate').value);
+    if (!Number.isFinite(rate) || rate <= 0) { showToast('Invalid MMK rate', 'error'); return; }
+    coinMmkRate = rate;
+    // Keep legacy fields synchronized for old data/functions.
+    mmkRate = (exchangeRate > 0) ? (rate / 10000) * exchangeRate : 0;
+    await db.collection('settings').doc('exchangeRate').set({
+        coinMmkRate: rate,
+        rate: exchangeRate,
+        mmkRate,
+        isExchangeOpen,
+        adReward: AD_REWARD,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+    localStorage.removeItem('cachedExchangeRate');
+    updateExchangeRateUI();
+    updateUI();
+    showToast(`✅ 10,000 Coins = ${rate.toLocaleString()} MMK သတ်မှတ်ပြီးပါပြီ`);
+}
+async function adminSetRate() {
+    const rate = parseInt(document.getElementById('adminRate').value);
+    if (!rate || rate < 1) { showToast('Invalid', 'error'); return; }
+    await db.collection('settings').doc('exchangeRate').set({ rate, mmkRate, coinMmkRate, isExchangeOpen, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true }); localStorage.removeItem('cachedExchangeRate');
+    exchangeRate = rate;
+    updateExchangeRateUI();
+    showToast('✅ Rate set');
+}
+async function adminSetMmkRate() {
+    const rate = parseInt(document.getElementById('adminMmkRate').value);
+    if (!rate || rate < 1) { showToast('Invalid', 'error'); return; }
+    await db.collection('settings').doc('exchangeRate').set({ rate: exchangeRate, mmkRate: rate, isExchangeOpen, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true }); localStorage.removeItem('cachedExchangeRate');
+    mmkRate = rate;
+    updateExchangeRateUI();
+    showToast('✅ MMK set');
+}
+async function adminToggleExchange() {
+    isExchangeOpen = !isExchangeOpen;
+    await db.collection('settings').doc('exchangeRate').set({ rate: exchangeRate, mmkRate, isExchangeOpen, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true }); localStorage.removeItem('cachedExchangeRate');
+    updateExchangeStatusUI();
+    showToast(isExchangeOpen ? '✅ Opened' : '🔒 Closed');
+}
+function openExchangeFromMarket() {
+    if (isAccountRestricted()) { showRestrictedNotice(); return; }
+    if (!(isExchangeOpen && isExchangeDateOpen())) { showToast('🔒 Exchange ပိတ်ထားပါသည်', 'warning'); return; }
+    openModal('exchangeModal');
+}
+function setExchangeAmount(val) { document.getElementById('exchangeInput').value = val; calculateExchange(); }
+function calculateExchange() {
+    const amt = parseInt(document.getElementById('exchangeInput').value) || 0;
+    const result = document.getElementById('exchangeUsdt');
+    if (amt <= 0) { result.textContent = '0 MMK'; return; }
+    if (amt > (userData.coins || 0)) { result.textContent = 'Insufficient'; result.style.color = 'var(--rose-500)'; return; }
+    if (!coinMmkRate || coinMmkRate <= 0) { result.textContent = 'Coin → MMK Rate မသတ်မှတ်ရသေးပါ'; result.style.color = 'var(--rose-500)'; return; }
+    const mmk = (amt / 10000) * coinMmkRate;
+    result.textContent = mmk.toLocaleString(undefined, {maximumFractionDigits: 0}) + ' MMK';
+    result.style.color = 'var(--mint-600)';
+}
+
+async function confirmExchange() {
+    if (isAccountRestricted()) { showRestrictedNotice(); return; }
+    if (!currentUser) { showToast('❌ Please login', 'error'); return; }
+    if (!(isExchangeOpen && isExchangeDateOpen())) { showToast('🔒 Exchange ပိတ်ထားပါသည်', 'error'); return; }
+    if (!coinMmkRate || coinMmkRate <= 0) { showToast('❌ Admin မှ 10,000 Coin = MMK Rate သတ်မှတ်ပေးရန်လိုသည်', 'error'); return; }
+    if (!acquireCoinLock()) { showToast('⏳ Please wait...', 'warning'); return; }
+
+    try {
+        const amt = parseInt(document.getElementById('exchangeInput').value) || 0;
+        if (amt <= 0) { showToast('Invalid', 'error'); return; }
+        const mmkAmount = (amt / 10000) * coinMmkRate;
+        if (!confirm(`${amt.toLocaleString()} Coins → ${mmkAmount.toLocaleString(undefined,{maximumFractionDigits:0})} MMK?`)) return;
+
+        const userRef = db.collection('users').doc(currentUser.uid);
+        const result = await db.runTransaction(async (tx) => {
+            const snap = await tx.get(userRef);
+            if (!snap.exists) throw new Error('USER_NOT_FOUND');
+            const data = snap.data() || {};
+            if (data.isBanned === true) {
+                throw new Error('ACCOUNT_RESTRICTED');
+            }
+            const serverCoins = Math.max(0, Number(data.coins) || 0);
+            const serverMmk = Math.max(0, Number(data.mmkBalance) || 0);
+            if (serverCoins < amt) throw new Error('INSUFFICIENT_COINS');
+            const newCoins = serverCoins - amt;
+            const newMmk = serverMmk + mmkAmount;
+            tx.update(userRef, { coins: newCoins, mmkBalance: newMmk });
+            return { coins: newCoins, mmkBalance: newMmk };
+        });
+
+        userData.coins = result.coins;
+        userData.mmkBalance = result.mmkBalance;
+        saveCoinsToLocal(result.coins);
+        updateUI();
+
+        try {
+            await db.collection('transactions').add({
+                userId: currentUser.uid, type: 'coin_exchange',
+                amount: -amt,
+                mmkAmount: mmkAmount,
+                description: `${amt} Coins → ${mmkAmount.toLocaleString()} MMK`,
+                timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            });
+        } catch (e) {}
+        document.getElementById('exchangeInput').value = '';
+        document.getElementById('exchangeUsdt').textContent = '0 MMK';
+        showToast('✅ MMK အဖြစ်ပြောင်းပြီးပါပြီ');
+        closeModal('exchangeModal');
+    } catch (e) {
+        if (e.message === 'INSUFFICIENT_COINS') showToast('❌ Insufficient Coins', 'error');
+        else showToast('❌ Exchange failed', 'error');
+    } finally {
+        setTimeout(() => releaseCoinLock(), 1200);
+    }
+}
+
+async function requestWithdraw() {
+    if (isAccountRestricted()) { showRestrictedNotice(); return; }
+    if (!isWithdrawOpen) { showToast('❌ Withdraw ပိတ်ထားပါသည်', 'error'); return; }
+    if (!currentUser) { showToast('❌ Please login', 'error'); return; }
+
+    const amount = Number(document.getElementById('withdrawAmount').value);
+    const method = document.getElementById('withdrawMethod').value;
+    const accountName = document.getElementById('withdrawAccountName').value.trim();
+    const phone = document.getElementById('withdrawPhone').value.trim();
+
+    if (!method) { showToast('❌ Wave / KPay ရွေးချယ်ပါ', 'error'); return; }
+    if (!accountName) { showToast('❌ Username / အကောင့်အမည် ဖြည့်ပါ', 'error'); return; }
+    if (!phone) { showToast('❌ ဖုန်းနံပါတ် ဖြည့်ပါ', 'error'); return; }
+    if (!amount || amount < MIN_WITHDRAW_MMK) {
+        showToast(`❌ အနည်းဆုံး ${MIN_WITHDRAW_MMK.toLocaleString()} MMK`, 'error');
+        return;
+    }
+    if (amount > (userData.mmkBalance || 0)) {
+        showToast('❌ MMK လက်ကျန်မလုံလောက်ပါ', 'error');
+        return;
+    }
+
+    try {
+        const userRef = db.collection('users').doc(currentUser.uid);
+        const reqRef = db.collection('withdrawals').doc();
+
+        // Unique receipt number
+        const receiptNo =
+            'CT-' +
+            getReceiptDateKey() +
+            '-' +
+            reqRef.id.slice(-8).toUpperCase();
+
+        const result = await db.runTransaction(async (tx) => {
+            const snap = await tx.get(userRef);
+
+            if (!snap.exists) {
+                throw new Error('USER_NOT_FOUND');
+            }
+
+            const d = snap.data() || {};
+            if (d.isBanned === true) {
+                throw new Error('ACCOUNT_RESTRICTED');
+            }
+            const balance = Math.max(0, Number(d.mmkBalance) || 0);
+
+            if (balance < amount) {
+                throw new Error('INSUFFICIENT_MMK');
+            }
+
+            tx.update(userRef, {
+                mmkBalance: balance - amount
+            });
+
+            tx.set(reqRef, {
+                userId: currentUser.uid,
+                authUid: currentUser.uid,
+                username: d.username || 'User',
+                email: d.email || '',
+                amount: amount,
+                currency: 'MMK',
+                method: method,
+                accountName: accountName,
+                phone: phone,
+
+                // Withdrawal Receipt
+                receiptNo: receiptNo,
+
+                status: 'pending',
+                requestedAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+
+            return {
+                balance: balance - amount,
+                receiptNo: receiptNo,
+                username: d.username || 'User'
+            };
+        });
+
+        userData.mmkBalance = result.balance;
+        updateUI();
+
+        document.getElementById('withdrawAmount').value = '';
+        document.getElementById('withdrawMethod').value = '';
+        document.getElementById('withdrawAccountName').value = '';
+        document.getElementById('withdrawPhone').value = '';
+
+        // Show receipt immediately
+        showWithdrawalReceipt({
+            receiptNo: result.receiptNo,
+            username: result.username,
+            amount: amount,
+            method: method,
+            accountName: accountName,
+            phone: phone,
+            status: 'pending',
+            requestedAt: new Date()
+        });
+
+        showToast('✅ ငွေထုတ်ယူရန် Request တင်ပြီးပါပြီ');
+
+    } catch (e) {
+        console.error('requestWithdraw error:', e);
+
+        console.error('WITHDRAW ERROR DETAILS:', e);
+        let withdrawError = 'UNKNOWN_ERROR';
+        try {
+            withdrawError = [
+                e && e.code,
+                e && e.message,
+                typeof e === 'string' ? e : JSON.stringify(e)
+            ].filter(Boolean).join(' | ') || String(e);
+        } catch (_) {
+            withdrawError = String(e);
+        }
+        showToast(
+            e.message === 'INSUFFICIENT_MMK'
+                ? '❌ MMK လက်ကျန်မလုံလောက်ပါ'
+                : '❌ Request မတင်နိုင်ပါ: ' + withdrawError.slice(0, 90),
+            'error'
+        );
+    }
+}
+
+function toggleAuth(mode) {
+    const loginForm = document.getElementById('loginForm');
+    const signupForm = document.getElementById('signupForm');
+    const authError = document.getElementById('authError');
+
+    if (!loginForm || !signupForm) {
+        console.error('Auth form not found');
+        return;
+    }
+
+    const isSignup = mode === 'signup';
+
+    loginForm.style.display = isSignup ? 'none' : '';
+    signupForm.style.display = isSignup ? '' : 'none';
+
+    if (authError) {
+        authError.textContent = '';
+        authError.classList.remove('show');
+    }
+}
+
+window.toggleAuth = toggleAuth;
+
+function showAuthError(msg) {
+    const el = document.getElementById('authError');
+    el.textContent = msg;
+    el.classList.add('show');
+}
+
+// ✅ Referral link မှ ?ref= ပါလာရင် Auto-fill လုပ်ပေးမည်
+//    ဒါပေမယ့် Sign Up ခလုတ်ကို ဘယ်တော့မှ မပိတ်ပါ
+window.addEventListener('load', () => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const refParam = urlParams.get('ref');
+    const refInput = document.getElementById('signupRefCode');
+    const refBadge = document.getElementById('refBadge');
+
+    if (refParam && refInput) {
+        // Link မှ code ပါလာရင် auto-fill + lock
+        refInput.value = refParam.toUpperCase();
+        refInput.readOnly = true;
+        refInput.style.background = 'var(--slate-100)';
+        refInput.style.cursor = 'not-allowed';
+        if (refBadge) refBadge.textContent = '✅ Applied (locked)';
+        // Signup form ကို ပြပါ
+        setTimeout(() => { if (document.getElementById('signupForm')) toggleAuth('signup'); }, 500);
+    }
+    // ref မပါလည်း Sign Up ခလုတ် အလုပ်လုပ်နေတယ်
+});
+
+async function handleSignup() {
+    const username = document.getElementById('signupUsername').value.trim();
+    const email = document.getElementById('signupEmail').value.trim();
+    const password = document.getElementById('signupPassword').value;
+    const refCodeInput = document.getElementById('signupRefCode').value.trim().toUpperCase();
+
+    // ✅ Field တွေ အကုန်စစ်
+    if (!username) { showAuthError('❌ အမည် ဖြည့်ပါ'); return; }
+    if (!email) { showAuthError('❌ Email ဖြည့်ပါ'); return; }
+    if (!password) { showAuthError('❌ Password ဖြည့်ပါ'); return; }
+    if (password.length < 6) { showAuthError('❌ Password အနည်းဆုံး ၆ လုံး ဖြစ်ရမည်'); return; }
+
+    // ✅ Referral Code မဖြစ်မနေ လိုအပ်သည်
+    if (!refCodeInput) {
+        showAuthError('❌ Referral Code ဖြည့်ရန် လိုအပ်ပါသည်');
+        return;
+    }
+
+    let referredBy = '';
+    let referrerData = null;
+
+    // ✅ Referral Code validation
+    // ADMIN2026 + Settings ထဲက လက်ရှိ Admin Referral Code နှစ်ခုလုံးကို လက်ခံ
+    try {
+        let currentAdminRefCode = ADMIN_REF_CODE;
+
+        try {
+            const adminRefSnap = await db.collection('settings')
+                .doc('adminAccess')
+                .get();
+
+            if (adminRefSnap.exists && adminRefSnap.data().refCode) {
+                currentAdminRefCode = String(adminRefSnap.data().refCode)
+                    .trim()
+                    .toUpperCase();
+            }
+        } catch (adminRefError) {
+            console.warn('Admin referral settings read failed:', adminRefError);
+        }
+
+        if (
+            refCodeInput === String(ADMIN_REF_CODE).toUpperCase() ||
+            refCodeInput === String(ADMIN_SIGNUP_REF_CODE).toUpperCase() ||
+            refCodeInput === currentAdminRefCode
+        ) {
+            // Admin referral
+            referredBy = currentAdminRefCode;
+            referrerData = null;
+        } else {
+            // Normal user referral
+            const refSnap = await db.collection('users')
+                .where('refCode', '==', refCodeInput)
+                .limit(1)
+                .get();
+
+            if (!refSnap.empty) {
+                referredBy = refCodeInput;
+                referrerData = refSnap.docs[0];
+            } else {
+                showAuthError('❌ Referral Code မမှန်ပါ');
+                return;
+            }
+        }
+    } catch (e) {
+        console.error('Referral code validation error:', e);
+        showAuthError('❌ Code စစ်ဆေးမှု မအောင်မြင်ပါ');
+        return;
+    }
+
+    // ✅ အားလုံး မှန်ရင် အကောင့်ဖန်တီး
+    try {
+        const cred = await auth.createUserWithEmailAndPassword(email, password);
+        const myRefCode = generateRefCode();
+
+        await db.collection('users').doc(cred.user.uid).set({
+            id: cred.user.uid,
+            authUid: cred.user.uid,
+            username, email,
+            coins: 1000, usdt: 0, mmkBalance: 0,
+            isBanned: false,
+            level: 1, totalAds: 0,
+            refCode: myRefCode,
+            referredBy: referredBy,
+            referralCount: 0, referralEarned: 0,
+    mmkBalance: 0,
+            claimedLevels: [], unlockedAch: [], claimedAch: [],
+            lastActive: firebase.firestore.FieldValue.serverTimestamp(),
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+
+        await db.collection('transactions').add({
+            userId: cred.user.uid, type: 'welcome_bonus', amount: 1000,
+            description: 'Welcome Bonus',
+            timestamp: firebase.firestore.FieldValue.serverTimestamp()
+        });
+
+        if (referrerData) {
+            const referrerId = referrerData.id;
+            await db.collection('users').doc(referrerId).update({
+                coins: firebase.firestore.FieldValue.increment(REFERRAL_BONUS),
+                referralCount: firebase.firestore.FieldValue.increment(1),
+                referralEarned: firebase.firestore.FieldValue.increment(REFERRAL_BONUS)
+            });
+            await db.collection('transactions').add({
+                userId: referrerId, type: 'referral_bonus', amount: REFERRAL_BONUS,
+                description: `Referral Bonus from ${username}`,
+                timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            });
+        }
+
+        saveCoinsToLocal(1000);
+        showToast('✅ အကောင့်ဖွင့်ပြီးပါပြီ!');
+        toggleAuth('login');
+        window.history.replaceState({}, '', window.location.pathname);
+    } catch (e) { showAuthError(e.message); }
+}
+
+async function handleLogin() {
+    const email = document.getElementById('loginEmail').value.trim();
+    const password = document.getElementById('loginPassword').value;
+    if (!email || !password) { showAuthError('Email & Password required'); return; }
+    try { await auth.signInWithEmailAndPassword(email, password); showToast('✅ Welcome!'); }
+    catch (e) { showAuthError(e.message); }
+}
+async function handleLogout() {
+    if (hasActiveAdAccess()) await flushPendingAdRewards(true);
+    await auth.signOut();
+    showToast('👋 Logged out');
+}
+// ============================================================
+//  AUTH STATE
+// ============================================================
+auth.onAuthStateChanged(async (user) => {
+    if (user) {
+        currentUser = user;
+        userData.isBanned = true;
+        updateDangerZoneUI();
+        resetNotificationState();
+        startNotificationListener(user.uid);
+        refreshNotificationBadge();
+        await loadAdAccess(user.uid);
+        document.getElementById('authScreen').classList.remove('active');
+        document.getElementById('appContainer').classList.add('active');
+        document.getElementById('floatingPlayBtn').style.display = 'flex';
+        applyLanguage();
+
+        try {
+            const doc = await db.collection('users').doc(user.uid).get();
+            if (doc.exists) {
+                const data = doc.data();
+                userData.isBanned = data.isBanned === true;
+                updateDangerZoneUI();
+                userData.coins = data.coins || 0;
+                userData.username = data.username || 'User';
+                userData.email = data.email || '';
+                userData.usdt = data.usdt || 0;
+                userData.mmkBalance = Number(data.mmkBalance) || 0;
+                // Migrate legacy USDT wallet to MMK once, using the current MMK rate.
+                if (!data.mmkBalance && userData.usdt > 0 && mmkRate > 0) {
+                    userData.mmkBalance = userData.usdt * mmkRate;
+                    await db.collection('users').doc(user.uid).update({
+                        mmkBalance: userData.mmkBalance
+                    });
+                }
+                userData.level = data.level || 1;
+                userData.totalAds = data.totalAds || 0;
+                userData.refCode = data.refCode || generateRefCode();
+                userData.referredBy = data.referredBy || '';
+                userData.referralCount = data.referralCount || 0;
+                userData.referralEarned = data.referralEarned || 0;
+                userData.claimedLevels = data.claimedLevels || [];
+                userData.unlockedAch = data.unlockedAch || [];
+                userData.claimedAch = data.claimedAch || [];
+
+                // Premium Profile Frame persistence
+                userData.profileFrames = Array.isArray(data.profileFrames)
+                    ? data.profileFrames
+                    : [];
+                userData.profileFrame = data.profileFrame || 'none';
+                applyProfileFrame(userData.profileFrame);
+                if (!data.refCode) {
+                    await db.collection('users').doc(user.uid).update({ refCode: userData.refCode });
+                }
+                saveCoinsToLocal(userData.coins);
+                updateDangerZoneUI();
+                updateUI();
+            }
+        } catch (error) {}
+
+        // Keep pending rewards local until the Firestore batch succeeds.
+        // The user snapshot displays server balance plus pending rewards.
+        const pendingOnLogin = getPendingAdRewards();
+        if (pendingOnLogin.count > 0) {
+            await flushPendingAdRewards(true);
+        }
+
+        await loadExchangeRate();
+        updateUI();
+        // Ensure legacy users have an MMK balance before the first UI render.
+        try {
+            const freshUser = await db.collection('users').doc(user.uid).get();
+            const freshData = freshUser.data() || {};
+            if (!Object.prototype.hasOwnProperty.call(freshData, 'mmkBalance')) {
+                const migratedMmk = Math.max(0, Number(freshData.usdt) || 0) * Math.max(0, Number(mmkRate) || 0);
+                await db.collection('users').doc(user.uid).update({ mmkBalance: migratedMmk });
+                userData.mmkBalance = migratedMmk;
+                updateUI();
+            }
+        } catch (e) {}
+        await loadAdLinksFromFirestore();
+        await loadAppLinksFromFirestore();
+
+        db.collection('users').doc(user.uid).onSnapshot((doc) => {
+            if (doc.exists) {
+                const d = doc.data();
+                userData.isBanned = d.isBanned === true;
+                updateDangerZoneUI();
+
+                const pendingLive = getPendingAdRewards();
+                const _oldShownCoins = Number(userData.coins) || 0;
+                const _serverCoins = Number(d.coins) || 0;
+                const _pendingCoins = Number(pendingLive.coins) || 0;
+                const _shownCoins = _serverCoins + _pendingCoins;
+
+                console.log(
+                    '💰 COIN SNAPSHOT | OLD=' + _oldShownCoins +
+                    ' | SERVER=' + _serverCoins +
+                    ' | PENDING=' + _pendingCoins +
+                    ' | SHOWN=' + _shownCoins +
+                    ' | DIFF=' + (_shownCoins - _oldShownCoins) +
+                    ' | CACHE=' + (doc.metadata ? doc.metadata.fromCache : 'unknown') +
+                    ' | PENDING_WRITES=' + (doc.metadata ? doc.metadata.hasPendingWrites : 'unknown') +
+                    ' | TIME=' + new Date().toISOString()
+                );
+
+                userData.coins = _shownCoins;
+                userData.usdt = d.usdt || 0;
+                userData.mmkBalance = Number(d.mmkBalance) || 0;
+                userData.totalAds = (d.totalAds || 0) + (pendingLive.count || 0);
+                userData.level = d.level || userData.level || 1;
+                userData.referralCount = d.referralCount || 0;
+                userData.referralEarned = d.referralEarned || 0;
+                userData.claimedLevels = d.claimedLevels || [];
+                userData.claimedAch = d.claimedAch || [];
+                updateUI();
+            }
+        });
+
+        // Update lastActive on login so Admin can separate Active / Inactive users.
+        const activeKey = 'lastActiveSync_' + user.uid;
+        const lastActiveSync = parseInt(localStorage.getItem(activeKey) || '0');
+
+        if (Date.now() - lastActiveSync > 60 * 60 * 1000) {
+            db.collection('users').doc(user.uid).update({
+                lastActive: firebase.firestore.FieldValue.serverTimestamp()
+            }).then(() => {
+                localStorage.setItem(activeKey, Date.now().toString());
+            }).catch(() => {});
+        }
+
+        renderAdCards();
+        await refreshDailyAdsProgress();
+        updateDailyBonusUI();
+        loadDashboard();
+
+        setInterval(() => updateDailyBonusUI(), 60000);
+        setInterval(() => saveCoinsToLocal(userData.coins), 60000);
+    } else {
+        clearAdAccessState();
+        resetNotificationState();
+        currentUser = null;
+        userData.isBanned = false;
+        updateDangerZoneUI();
+        document.getElementById('authScreen').classList.add('active');
+        document.getElementById('appContainer').classList.remove('active');
+        document.getElementById('floatingPlayBtn').style.display = 'none';
+    }
+});
+
+async function loadAdLinksFromFirestore() {
+    const key = 'cachedAdLinks';
+    const TTL = 10 * 60 * 1000;
+    try {
+        const cached = JSON.parse(localStorage.getItem(key) || 'null');
+        if (cached && Date.now() - cached.timestamp < TTL) {
+            adLinks = cached.links || [];
+            renderAdCards();
+            return;
+        }
+    } catch (e) {}
+    try {
+        const doc = await db.collection('settings').doc('adLinks').get();
+        if (doc.exists && doc.data().links?.length > 0) {
+            adLinks = doc.data().links;
+            localStorage.setItem(key, JSON.stringify({ links: adLinks, timestamp: Date.now() }));
+            localStorage.setItem('adLinks', JSON.stringify(adLinks));
+        } else adLinks = JSON.parse(localStorage.getItem('adLinks')) || [];
+    } catch (e) { adLinks = JSON.parse(localStorage.getItem('adLinks')) || []; }
+    renderAdCards();
+}
+async function loadAppLinksFromFirestore() {
+    const key = 'cachedAppLinks';
+    const TTL = 10 * 60 * 1000;
+    try {
+        const cached = JSON.parse(localStorage.getItem(key) || 'null');
+        if (cached && Date.now() - cached.timestamp < TTL) {
+            appLinks = cached.links || [];
+            return;
+        }
+    } catch (e) {}
+    try {
+        const doc = await db.collection('settings').doc('appLinks').get();
+        if (doc.exists && doc.data().links?.length > 0) {
+            appLinks = doc.data().links;
+            localStorage.setItem(key, JSON.stringify({ links: appLinks, timestamp: Date.now() }));
+            localStorage.setItem('appLinks', JSON.stringify(appLinks));
+        } else appLinks = JSON.parse(localStorage.getItem('appLinks')) || [];
+    } catch (e) { appLinks = JSON.parse(localStorage.getItem('appLinks')) || []; }
+}
+
+// ============================================================
+//  LOCAL STORAGE
+// ============================================================
+function saveCoinsToLocal(coins) {
+    if (!currentUser) return;
+    try { localStorage.setItem('userCoins_' + currentUser.uid, JSON.stringify({ coins, timestamp: Date.now() })); } catch (e) {}
+}
+function getCoinsFromLocal() {
+    if (!currentUser) return null;
+    try {
+        const data = localStorage.getItem('userCoins_' + currentUser.uid);
+        if (data) {
+            const parsed = JSON.parse(data);
+            if (Date.now() - parsed.timestamp < 604800000) return parsed.coins;
+        }
+    } catch (e) {}
+    return null;
+}
+function saveTransactionLocal(type, amount, description) {
+    if (!currentUser) return;
+    try {
+        const tx = JSON.parse(localStorage.getItem('localTx_' + currentUser.uid) || '[]');
+        tx.push({ type, amount, description, timestamp: Date.now(), synced: false });
+        if (tx.length > 100) tx.splice(0, tx.length - 100);
+        localStorage.setItem('localTx_' + currentUser.uid, JSON.stringify(tx));
+    } catch (e) {}
+}
+async function syncLocalTransactions() {
+    if (!currentUser) return;
+    try {
+        const tx = JSON.parse(localStorage.getItem('localTx_' + currentUser.uid) || '[]');
+        const unsynced = tx.filter(t => !t.synced);
+        for (const t of unsynced) {
+            try { await db.collection('transactions').add({ userId: currentUser.uid, type: t.type, amount: t.amount, description: t.description, timestamp: new Date(t.timestamp) }); t.synced = true; }
+            catch (e) { if (e.code === 'resource-exhausted') break; }
+        }
+        localStorage.setItem('localTx_' + currentUser.uid, JSON.stringify(tx));
+    } catch (e) {}
+}
+
+// ============================================================
+//  ADMIN
+// ============================================================
+let adminTapCount = 0, adminTapTimeout = null;
+function handleAdminLockClick() {
+    adminTapCount++;
+    const counter = document.getElementById('tapCounter');
+    counter.textContent = adminTapCount;
+    counter.style.display = 'flex';
+    clearTimeout(adminTapTimeout);
+    adminTapTimeout = setTimeout(() => { adminTapCount = 0; counter.textContent = '0'; counter.style.display = 'none'; }, 3000);
+    if (adminTapCount >= 12) {
+        adminTapCount = 0; counter.textContent = '0'; counter.style.display = 'none';
+        clearTimeout(adminTapTimeout);
+        showToast('🔓 Admin!', 'success');
+        const codeInput = document.getElementById('adminRefCodeInput');
+        const codeHint = document.getElementById('adminRefCodeHint');
+        if (codeInput) {
+            const first = localStorage.getItem('realcash_admin_verified') !== '1';
+            codeInput.style.display = first ? '' : 'none';
+            if (codeHint && codeHint.classList.contains('admin-hint')) codeHint.style.display = first ? '' : 'none';
+        }
+        openModal('adminModal');
+    }
+}
+
+// ============================================================
+// REALCASH ANALYTICS
+// ============================================================
+// Cache admin analytics for 2 minutes to reduce repeated Firestore reads.
+async function loadRealcashAnalytics() {
+    if (!isAdmin) return;
+
+    const cacheKey = 'cashtube_admin_analytics_cache_v1';
+    const cacheTTL = 2 * 60 * 1000;
+    const ids = [
+        'analyticsUsers',
+        'analyticsActive',
+        'analyticsAds',
+        'analyticsCoins',
+        'analyticsWithdrawals',
+        'analyticsPending'
+    ];
+
+    try {
+        const raw = localStorage.getItem(cacheKey);
+        if (raw) {
+            const cached = JSON.parse(raw);
+
+            if (
+                cached &&
+                Date.now() - cached.time >= 0 &&
+                Date.now() - cached.time < cacheTTL &&
+                cached.values &&
+                ids.every(id =>
+                    cached.values[id] !== undefined &&
+                    cached.values[id] !== 'Error'
+                )
+            ) {
+                ids.forEach(id => {
+                    const el = document.getElementById(id);
+                    if (!el) return;
+                    el.textContent = cached.values[id];
+                    el.style.color = '#0f172a';
+                    el.style.fontWeight = '900';
+                    el.style.visibility = 'visible';
+                    el.style.opacity = '1';
+                });
+
+                const updated = document.getElementById('analyticsUpdated');
+                if (updated) {
+                    updated.textContent =
+                        'Cached • ' + cached.today + ' • Yangon Time';
+                    updated.style.color = '#64748b';
+                }
+
+                console.log('ADMIN ANALYTICS CACHE HIT');
+                return;
+            }
+        }
+    } catch (e) {
+        console.warn('ADMIN ANALYTICS CACHE READ FAILED:', e);
+    }
+
+    await loadRealcashAnalyticsFromFirestore();
+
+    try {
+        const values = {};
+        for (const id of ids) {
+            const el = document.getElementById(id);
+            if (!el || el.textContent.trim() === 'Error') return;
+            values[id] = el.textContent;
+        }
+
+        localStorage.setItem(cacheKey, JSON.stringify({
+            time: Date.now(),
+            today: new Intl.DateTimeFormat('en-CA', {
+                timeZone: 'Asia/Yangon'
+            }).format(new Date()),
+            values
+        }));
+
+        console.log('ADMIN ANALYTICS CACHE SAVED');
+    } catch (e) {
+        console.warn('ADMIN ANALYTICS CACHE SAVE FAILED:', e);
+    }
+}
+
+async function loadRealcashAnalyticsFromFirestore() {
+    if (!isAdmin) return;
+
+    const setValue = (id, value) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+
+        el.textContent = Number(value || 0).toLocaleString();
+        el.style.color = '#0f172a';
+        el.style.fontWeight = '900';
+        el.style.visibility = 'visible';
+        el.style.opacity = '1';
+    };
+
+    const setError = (id, message) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+
+        el.textContent = message;
+        el.style.color = '#dc2626';
+        el.style.fontWeight = '900';
+        el.style.visibility = 'visible';
+        el.style.opacity = '1';
+    };
+
+    try {
+        const today = new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'Asia/Yangon'
+        }).format(new Date());
+
+        console.log('===== REALCASH ANALYTICS DEBUG =====');
+        console.log('Today:', today);
+        console.log('Firebase UID:', auth.currentUser ? auth.currentUser.uid : 'NOT SIGNED IN');
+
+        // USERS
+        try {
+            const usersSnap = await db.collection('users').get();
+
+            let activeToday = 0;
+
+            usersSnap.forEach(doc => {
+                const d = doc.data();
+
+                if (d.lastActive && typeof d.lastActive.toDate === 'function') {
+                    const activeDate = new Intl.DateTimeFormat('en-CA', {
+                        timeZone: 'Asia/Yangon'
+                    }).format(d.lastActive.toDate());
+
+                    if (activeDate === today) {
+                        activeToday++;
+                    }
+                }
+            });
+
+            setValue('analyticsUsers', usersSnap.size);
+            setValue('analyticsActive', activeToday);
+
+            console.log('USERS OK:', usersSnap.size);
+            console.log('ACTIVE TODAY OK:', activeToday);
+
+        } catch (e) {
+            console.error('USERS ERROR:', e);
+            setError('analyticsUsers', 'Error');
+            setError('analyticsActive', 'Error');
+        }
+
+        // ADS
+        try {
+            const adSnap = await db.collection('adWatches')
+                .where('date', '==', today)
+                .get();
+
+            let adsToday = 0;
+            let coinsToday = 0;
+
+            adSnap.forEach(doc => {
+                const d = doc.data();
+                adsToday += Number(d.count || 0);
+                coinsToday += Number(d.totalCoins || 0);
+            });
+
+            setValue('analyticsAds', adsToday);
+            setValue('analyticsCoins', coinsToday);
+
+            console.log('ADS OK:', adsToday);
+            console.log('COINS TODAY OK:', coinsToday);
+
+        } catch (e) {
+            console.error('ADS ERROR:', e);
+            setError('analyticsAds', 'Error');
+            setError('analyticsCoins', 'Error');
+        }
+
+        // WITHDRAWALS
+        try {
+            let withdrawalSnap = null;
+
+            try {
+                withdrawalSnap = await db.collection('withdrawals').get();
+                console.log('WITHDRAWALS COLLECTION OK:', withdrawalSnap.size);
+            } catch (e1) {
+                console.error('withdrawals collection ERROR:', e1);
+
+                try {
+                    withdrawalSnap = await db.collection('withdrawRequests').get();
+                    console.log('withdrawRequests COLLECTION OK:', withdrawalSnap.size);
+                } catch (e2) {
+                    console.error('withdrawRequests collection ERROR:', e2);
+                    throw e2;
+                }
+            }
+
+            let totalWithdrawals = withdrawalSnap.size;
+            let pendingWithdrawals = 0;
+
+            withdrawalSnap.forEach(doc => {
+                const d = doc.data();
+                const status = String(d.status || '').toLowerCase();
+
+                if (status === 'pending') {
+                    pendingWithdrawals++;
+                }
+            });
+
+            setValue('analyticsWithdrawals', totalWithdrawals);
+            setValue('analyticsPending', pendingWithdrawals);
+
+            console.log('WITHDRAWALS OK:', totalWithdrawals);
+            console.log('PENDING OK:', pendingWithdrawals);
+
+        } catch (e) {
+            console.error('WITHDRAWAL FINAL ERROR:', e);
+            setError('analyticsWithdrawals', 'Error');
+            setError('analyticsPending', 'Error');
+        }
+
+        const updated = document.getElementById('analyticsUpdated');
+
+        if (updated) {
+            updated.textContent =
+                'Updated • ' + today + ' • Yangon Time';
+            updated.style.color = '#64748b';
+        }
+
+        console.log('===== ANALYTICS DEBUG END =====');
+
+    } catch (e) {
+        console.error('ANALYTICS FATAL ERROR:', e);
+    }
+}
+
+async function verifyAdmin() {
+    const user = auth.currentUser;
+
+    if (!user) {
+        showToast('Firebase account အရင် Login ဝင်ပါ', 'error');
+        return;
+    }
+
+    try {
+        showToast('Checking Admin permission...');
+
+        // Firestore Admin Document is the authority.
+        const adminSnap = await db.collection('admins').doc(user.uid).get();
+
+        if (!adminSnap.exists || adminSnap.data().active !== true) {
+            isAdmin = false;
+            showToast('❌ ဒီအကောင့်မှာ Admin ခွင့်ပြုချက်မရှိပါ', 'error');
+            return;
+        }
+
+        isAdmin = true;
+
+        document.getElementById('adminLogin').style.display = 'none';
+        document.getElementById('adminDashboard').style.display = 'block';
+
+        const legacyRateInput = document.getElementById('adminRate');
+        if (legacyRateInput) legacyRateInput.value = exchangeRate;
+
+        const coinMmkInput = document.getElementById('adminCoinMmkRate');
+        if (coinMmkInput) coinMmkInput.value = coinMmkRate || '';
+
+        const refCodeInput = document.getElementById('adminRefCodeManage');
+        if (refCodeInput) {
+            let validCode = ADMIN_REF_CODE;
+            try {
+                const s = await db.collection('settings').doc('adminAccess').get();
+                if (s.exists && s.data().refCode) {
+                    validCode = String(s.data().refCode).toUpperCase();
+                }
+            } catch (e) {
+                console.warn('Admin referral settings unavailable:', e);
+            }
+            refCodeInput.value = validCode;
+        }
+
+        const withdrawBtn = document.getElementById('toggleWithdrawBtn');
+        if (withdrawBtn) {
+            withdrawBtn.textContent = isWithdrawOpen ? '🔒 Close' : '🔓 Open';
+        }
+
+        updateExchangeStatusUI();
+        updateExchangeRateUI();
+        updateAdRewardUI();
+        loadAdminUsers();
+        loadWithdrawRequests();
+        loadFreeLevelRequests();
+        loadPaidLevelRequests();
+        loadLevelPaymentAccounts(true);
+        loadAppList();
+        loadRealcashAnalytics();
+        loadAdList();
+        loadDailyTop3Rewards();
+        loadAdminAdAccessRequests();
+
+        console.log('ADMIN VERIFIED UID:', user.uid);
+        showToast('✅ Admin access verified');
+        closeModal('adminModal');
+
+    } catch (error) {
+        isAdmin = false;
+        console.error('ADMIN VERIFICATION ERROR:', error);
+        showToast('Admin verification failed: ' + (error.message || 'Unknown error'), 'error');
+    }
+}
+// ADMIN NOTIFICATION USER SEARCH
+window.adminNotificationSearchResults = [];
+
+async function searchAdminNotificationUsers() {
+    const input = document.getElementById('adminNotificationSearch');
+    const resultsBox = document.getElementById('adminNotificationSearchResults');
+    const status = document.getElementById('adminNotificationSearchMsg');
+    const button = document.getElementById('adminNotificationSearchBtn');
+    const uidInput = document.getElementById('adminNotificationUid');
+    const selectedBox = document.getElementById('adminNotificationSelected');
+
+    if (!isAdmin || !currentUser || !auth.currentUser) {
+        status.textContent = 'Admin login required.';
+        return;
+    }
+
+    const term = input.value.trim();
+    const normalizedTerm = term.toLowerCase().replace(/^@/, '');
+
+    uidInput.value = '';
+    selectedBox.textContent = 'No user selected.';
+    resultsBox.replaceChildren();
+    window.adminNotificationSearchResults = [];
+
+    if (!normalizedTerm) {
+        status.textContent = 'Enter a Gmail address or Username.';
+        return;
+    }
+
+    if (term.length > 150) {
+        status.textContent = 'Search text is too long.';
+        return;
+    }
+
+    button.disabled = true;
+    status.textContent = 'Searching users...';
+
+    try {
+        const found = new Map();
+        const usersRef = db.collection('users');
+
+        // First try indexed exact queries.
+        const exactQueries = [
+            usersRef.where('email', '==', term).limit(10).get(),
+            usersRef.where('email', '==', term.toLowerCase()).limit(10).get(),
+            usersRef.where('username', '==', term).limit(10).get()
+        ];
+
+        const exactSnapshots = await Promise.all(exactQueries);
+
+        exactSnapshots.forEach(snapshot => {
+            snapshot.forEach(doc => {
+                const data = doc.data();
+                found.set(doc.id, {
+                    uid: doc.id,
+                    username: String(data.username || data.name || 'User'),
+                    email: String(data.email || '')
+                });
+            });
+        });
+
+        // Fallback: scan users in pages to handle legacy capitalization,
+        // whitespace, and usernames beginning with @.
+        let lastDoc = null;
+        let scanned = 0;
+        const PAGE_SIZE = 200;
+        const MAX_SCAN = 5000;
+
+        while (found.size === 0 && scanned < MAX_SCAN) {
+            let query = usersRef
+                .orderBy(firebase.firestore.FieldPath.documentId())
+                .limit(PAGE_SIZE);
+
+            if (lastDoc) query = query.startAfter(lastDoc);
+
+            const page = await query.get();
+            if (page.empty) break;
+
+            for (const doc of page.docs) {
+                const data = doc.data();
+                const email = String(data.email || '').trim().toLowerCase();
+                const username = String(data.username || data.name || '')
+                    .trim().toLowerCase().replace(/^@/, '');
+
+                if (email === normalizedTerm || username === normalizedTerm) {
+                    found.set(doc.id, {
+                        uid: doc.id,
+                        username: String(data.username || data.name || 'User'),
+                        email: String(data.email || '')
+                    });
+                }
+            }
+
+            scanned += page.size;
+            lastDoc = page.docs[page.docs.length - 1];
+
+            if (page.size < PAGE_SIZE) break;
+
+            status.textContent = 'Searching users... ' + scanned + ' checked';
+        }
+
+        window.adminNotificationSearchResults = Array.from(found.values());
+
+        if (!window.adminNotificationSearchResults.length) {
+            status.textContent = scanned >= MAX_SCAN
+                ? 'No match in first ' + MAX_SCAN + ' users. Search limit reached.'
+                : 'No matching user found. Checked ' + scanned + ' users.';
+            return;
+        }
+
+        status.textContent =
+            window.adminNotificationSearchResults.length + ' matching account(s) found.';
+
+        window.adminNotificationSearchResults.forEach((user, index) => {
+            const card = document.createElement('div');
+            card.style.cssText =
+                'padding:10px;margin:6px 0;border:1px solid var(--border-color,#444);' +
+                'border-radius:10px;display:flex;justify-content:space-between;' +
+                'align-items:center;gap:10px;';
+
+            const details = document.createElement('div');
+            details.style.cssText = 'min-width:0;overflow-wrap:anywhere;';
+
+            const name = document.createElement('div');
+            name.style.fontWeight = 'bold';
+            name.textContent = user.username;
+
+            const email = document.createElement('div');
+            email.style.fontSize = '12px';
+            email.textContent = user.email || 'No email stored';
+
+            details.append(name, email);
+
+            const select = document.createElement('button');
+            select.type = 'button';
+            select.className = 'btn-primary';
+            select.textContent = 'Select';
+            select.addEventListener('click', () => {
+                selectAdminNotificationUser(index);
+            });
+
+            card.append(details, select);
+            resultsBox.appendChild(card);
+        });
+
+    } catch (error) {
+        console.error('NOTIFICATION USER SEARCH ERROR:', error);
+        status.textContent = 'Search failed: ' + (error.code || '') +
+            ' ' + (error.message || 'Permission denied');
+    } finally {
+        button.disabled = false;
+    }
+}
+
+function selectAdminNotificationUser(index) {
+    const users = window.adminNotificationSearchResults || [];
+    const user = users[index];
+
+    if (!user || !isAdmin || !auth.currentUser) return;
+
+    document.getElementById('adminNotificationUid').value = user.uid;
+    document.getElementById('adminNotificationSelected').textContent =
+        'Selected: ' + user.username + ' (' + (user.email || user.uid) + ')';
+
+    document.getElementById('adminNotificationMsg').textContent = '';
+}
+
+
+async function createAutomaticUserNotification(uid, title, message) {
+    try {
+        if (!isAdmin || !auth.currentUser || !uid) {
+            console.warn('Automatic notification skipped: Admin or UID missing');
+            return false;
+        }
+
+        await db.collection('notifications')
+            .doc(String(uid))
+            .collection('items')
+            .add({
+                title: String(title).slice(0, 80),
+                message: String(message).slice(0, 500),
+                read: false,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                createdBy: auth.currentUser.uid
+            });
+
+        return true;
+    } catch (e) {
+        console.error('Automatic notification failed:', e);
+        return false;
+    }
+}
+
+async function sendAdminNotification() {
+    const uidInput = document.getElementById('adminNotificationUid');
+    const titleInput = document.getElementById('adminNotificationTitle');
+    const messageInput = document.getElementById('adminNotificationMessage');
+    const status = document.getElementById('adminNotificationMsg');
+    const button = document.getElementById('adminSendNotificationBtn');
+
+    const uid = uidInput.value.trim();
+    const title = titleInput.value.trim();
+    const message = messageInput.value.trim();
+
+    if (!isAdmin || !currentUser || !auth.currentUser) {
+        showToast('Admin login required', 'error');
+        return;
+    }
+
+    if (!uid || !title || !message) {
+        status.textContent = 'Please fill in all fields.';
+        return;
+    }
+
+    if (uid.length > 128 || title.length > 80 || message.length > 500) {
+        status.textContent = 'Input is too long.';
+        return;
+    }
+
+    button.disabled = true;
+    status.textContent = 'Sending...';
+
+    try {
+        await db.collection('notifications')
+            .doc(uid)
+            .collection('items')
+            .add({
+                title: title,
+                message: message,
+                read: false,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                createdBy: auth.currentUser.uid
+            });
+
+        status.textContent = 'Notification sent successfully.';
+        uidInput.value = '';
+        titleInput.value = '';
+        messageInput.value = '';
+
+        document.getElementById('adminNotificationSearch').value = '';
+        document.getElementById('adminNotificationSelected').textContent = 'No user selected.';
+        document.getElementById('adminNotificationSearchResults').replaceChildren();
+        document.getElementById('adminNotificationSearchMsg').textContent = '';
+        window.adminNotificationSearchResults = [];
+
+        showToast('Notification sent successfully');
+    } catch (error) {
+        console.error('SEND NOTIFICATION ERROR:', error);
+        status.textContent = 'Failed to send: ' + (error.message || 'Permission denied');
+        showToast('Could not send notification', 'error');
+    } finally {
+        button.disabled = false;
+    }
+}
+
+
+// ============================================================
+// ADMIN BROADCAST NOTIFICATION — PAGINATED BATCH SENDING
+// ============================================================
+async function broadcastAdminNotification() {
+    const titleInput = document.getElementById('adminNotificationTitle');
+    const messageInput = document.getElementById('adminNotificationMessage');
+    const status = document.getElementById('adminBroadcastNotificationStatus');
+    const button = document.getElementById('adminBroadcastNotificationBtn');
+
+    const title = titleInput.value.trim();
+    const message = messageInput.value.trim();
+
+    if (!isAdmin || !currentUser || !auth.currentUser) {
+        status.textContent = 'Admin login required.';
+        return;
+    }
+
+    if (!title || !message) {
+        status.textContent = 'Please enter notification title and message first.';
+        return;
+    }
+
+    if (title.length > 80 || message.length > 500) {
+        status.textContent = 'Title or message is too long.';
+        return;
+    }
+
+    const confirmed = confirm(
+        'သေချာပါသလား?\n\n' +
+        'ဒီ Notification ကို Registered Users အားလုံးဆီ ပို့ပါမယ်။\n' +
+        'ပို့ပြီးသား Notification တွေကို ပြန်ဖျက်လို့မရနိုင်ပါ။'
+    );
+
+    if (!confirmed) return;
+
+    const PAGE_SIZE = 200;
+    let lastDoc = null;
+    let sentCount = 0;
+    let batchNumber = 0;
+
+    button.disabled = true;
+    status.textContent = 'Preparing broadcast...';
+
+    try {
+        const usersRef = db.collection('users');
+
+        while (true) {
+            let query = usersRef
+                .orderBy(firebase.firestore.FieldPath.documentId())
+                .limit(PAGE_SIZE);
+
+            if (lastDoc) {
+                query = query.startAfter(lastDoc);
+            }
+
+            const snapshot = await query.get();
+
+            if (snapshot.empty) break;
+
+            const batch = db.batch();
+
+            snapshot.docs.forEach(userDoc => {
+                const notificationRef = db.collection('notifications')
+                    .doc(userDoc.id)
+                    .collection('items')
+                    .doc();
+
+                batch.set(notificationRef, {
+                    title: title,
+                    message: message,
+                    read: false,
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    createdBy: auth.currentUser.uid
+                });
+            });
+
+            await batch.commit();
+
+            sentCount += snapshot.size;
+            batchNumber++;
+
+            status.textContent =
+                'Sending... ' + sentCount +
+                ' users completed (Batch ' + batchNumber + ').';
+
+            lastDoc = snapshot.docs[snapshot.docs.length - 1];
+
+            if (snapshot.size < PAGE_SIZE) break;
+        }
+
+        if (sentCount === 0) {
+            status.textContent = 'No registered users found.';
+        } else {
+            status.textContent =
+                'In-app notifications sent to ' + sentCount +
+                ' users. Starting push notifications...';
+
+            showToast('In-app notification sent to ' + sentCount + ' users');
+
+            // FCM PUSH BROADCAST
+            const PUSH_WORKER_URL =
+                'https://cashtube-push-worker.zuzu168372.workers.dev/';
+
+            let pushPageToken = null;
+            let pushSent = 0;
+            let pushFailed = 0;
+            let pushNoTokens = 0;
+            let pushUsersProcessed = 0;
+            let pushRequests = 0;
+
+            try {
+                do {
+                    pushRequests++;
+
+                    if (pushRequests > 1000) {
+                        throw new Error('Push request safety limit reached.');
+                    }
+
+                    const idToken = await auth.currentUser.getIdToken();
+
+                    const pushResponse = await fetch(PUSH_WORKER_URL, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': 'Bearer ' + idToken
+                        },
+                        body: JSON.stringify({
+                            title: title,
+                            message: message,
+                            pageToken: pushPageToken
+                        })
+                    });
+
+                    const pushData = await pushResponse.json();
+
+                    if (!pushResponse.ok || !pushData.success) {
+                        throw new Error(
+                            pushData.error || 'Push Worker request failed.'
+                        );
+                    }
+
+                    pushSent += Number(pushData.sent || 0);
+                    pushFailed += Number(pushData.failed || 0);
+                    pushNoTokens += Number(pushData.noTokens || 0);
+                    pushUsersProcessed += Number(pushData.usersProcessed || 0);
+
+                    pushPageToken = pushData.nextPageToken || null;
+
+                    status.textContent =
+                        'Push progress: ' + pushUsersProcessed +
+                        ' users checked, ' + pushSent +
+                        ' devices sent, ' + pushFailed + ' failed.';
+
+                    if (pushData.completed === false && !pushPageToken) {
+                        throw new Error('Worker did not return the next page token.');
+                    }
+
+                } while (pushPageToken);
+
+                status.textContent =
+                    '✅ Broadcast completed! In-app: ' + sentCount +
+                    ' users. Push: ' + pushSent +
+                    ' sent, ' + pushFailed + ' failed. ' +
+                    pushNoTokens + ' users had no registered tokens.';
+
+                showToast('In-app and Push broadcast completed');
+
+            } catch (pushError) {
+                console.error('FCM PUSH BROADCAST ERROR:', pushError);
+
+                status.textContent =
+                    '⚠️ In-app sent to ' + sentCount +
+                    ' users. Push stopped: ' +
+                    (pushError.message || 'Unknown error') +
+                    '. Push sent before error: ' + pushSent;
+
+                showToast('In-app sent; Push needs checking.', 'error');
+            }
+        }
+
+    } catch (error) {
+        console.error('BROADCAST NOTIFICATION ERROR:', error);
+
+        status.textContent =
+            '⚠️ Stopped after ' + sentCount +
+            ' successful sends. Error: ' +
+            (error.message || 'Permission denied');
+
+        showToast('Broadcast stopped. Check status.', 'error');
+
+    } finally {
+        button.disabled = false;
+    }
+}
+
+function adminLogout() {
+    isAdmin = false;
+    document.getElementById('adminLogin').style.display = 'block';
+    document.getElementById('adminDashboard').style.display = 'none';
+}
+function loadAppList() {
+    const tbody = document.getElementById('appListBody');
+    const links = JSON.parse(localStorage.getItem('appLinks')) || [];
+    if (!links.length) { tbody.innerHTML = '<tr><td colspan="2" class="table-loading">Empty</td></tr>'; return; }
+    tbody.innerHTML = links.map((link, i) => `<tr><td style="font-size:11px;text-align:left;"><a href="${link}" target="_blank" style="color:var(--blue-600);">${link.substring(0,30)}...</a></td><td><button class="btn-sm red" onclick="adminRemoveAppLink(${i})" style="padding:5px 10px;font-size:10px;">✕</button></td></tr>`).join('');
+}
+async function adminAddAppLink() {
+    const link = document.getElementById('adminAppLink').value.trim();
+    if (!link) return;
+    let links = JSON.parse(localStorage.getItem('appLinks')) || [];
+    links.push(link);
+    localStorage.setItem('appLinks', JSON.stringify(links));
+    appLinks = links;
+    document.getElementById('adminAppLink').value = '';
+    loadAppList();
+    try { await db.collection('settings').doc('appLinks').set({ links }); localStorage.removeItem('cachedAppLinks'); } catch (e) {}
+    showToast('✅ Added');
+}
+async function adminRemoveAppLink(i) {
+    if (!confirm('Delete?')) return;
+    let links = JSON.parse(localStorage.getItem('appLinks')) || [];
+    links.splice(i, 1);
+    localStorage.setItem('appLinks', JSON.stringify(links));
+    appLinks = links;
+    loadAppList();
+    try { await db.collection('settings').doc('appLinks').set({ links }); localStorage.removeItem('cachedAppLinks'); } catch (e) {}
+}
+function loadAdList() {
+    const tbody = document.getElementById('adListBody');
+    const links = JSON.parse(localStorage.getItem('adLinks')) || [];
+    if (!links.length) { tbody.innerHTML = '<tr><td colspan="2" class="table-loading">Empty</td></tr>'; return; }
+    tbody.innerHTML = links.map((link, i) => `<tr><td style="font-size:11px;text-align:left;"><a href="${link}" target="_blank" style="color:var(--blue-600);">${link.substring(0,30)}...</a></td><td><button class="btn-sm red" onclick="adminRemoveAdLink(${i})" style="padding:5px 10px;font-size:10px;">✕</button></td></tr>`).join('');
+}
+async function adminAddAdLink() {
+    const link = document.getElementById('adminAdLink').value.trim();
+    if (!link) return;
+    let links = JSON.parse(localStorage.getItem('adLinks')) || [];
+    links.push(link);
+    localStorage.setItem('adLinks', JSON.stringify(links));
+    adLinks = links;
+    document.getElementById('adminAdLink').value = '';
+    loadAdList();
+    try { await db.collection('settings').doc('adLinks').set({ links }); localStorage.removeItem('cachedAdLinks'); } catch (e) {}
+    renderAdCards();
+    showToast('✅ Added');
+}
+async function adminRemoveAdLink(i) {
+    if (!confirm('Delete?')) return;
+    let links = JSON.parse(localStorage.getItem('adLinks')) || [];
+    links.splice(i, 1);
+    localStorage.setItem('adLinks', JSON.stringify(links));
+    adLinks = links;
+    loadAdList();
+    try { await db.collection('settings').doc('adLinks').set({ links }); localStorage.removeItem('cachedAdLinks'); } catch (e) {}
+    renderAdCards();
+}
+async function adminToggleWithdraw() {
+    isWithdrawOpen = !isWithdrawOpen;
+    localStorage.setItem('isWithdrawOpen', isWithdrawOpen);
+    try {
+        await db.collection('settings').doc('withdrawControl').set({
+            isOpen: isWithdrawOpen,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+    } catch (e) {}
+    document.getElementById('toggleWithdrawBtn').textContent = isWithdrawOpen ? '🔒 Close' : '🔓 Open';
+    updateWithdrawUI();
+}
+async function adminSetWithdrawDate() {
+    const date = document.getElementById('adminWithdrawDate').value;
+    if (!date) return;
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Yangon' }).format(new Date());
+    isWithdrawOpen = date <= today;
+    localStorage.setItem('isWithdrawOpen', isWithdrawOpen);
+    try {
+        await db.collection('settings').doc('withdrawControl').set({
+            isOpen: isWithdrawOpen,
+            openDate: date,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+    } catch (e) {}
+    updateWithdrawUI();
+    showToast('✅ Set');
+}
+
+// ============================================================
+// DAILY TOP 3 REWARD SYSTEM
+// Uses existing adWatches records and Myanmar local date.
+// Rewards are paid only after Admin approval.
+// ============================================================
+const DAILY_TOP3_PRIZES = [3000, 2000, 1000];
+
+function dailyTop3Today() {
+    return new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Yangon'
+    }).format(new Date());
+}
+
+function dailyTop3Escape(value) {
+    return String(value == null ? '' : value).replace(/[&<>"']/g, ch => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+    })[ch]);
+}
+
+function dailyTop3StatusText(status) {
+    if (status === 'approved') return '✅ Approved';
+    if (status === 'rejected') return '❌ Rejected';
+    if (status === 'superseded') return '↪️ Updated ranking';
+    return '⏳ Pending approval';
+}
+
+
+async function auditDailyTop3Counts() {
+    if (!isAdmin) {
+        showToast('❌ Admin login လုပ်ပါ', 'error');
+        return;
+    }
+
+    const statusEl = document.getElementById('dailyTop3RewardStatus');
+    if (statusEl) statusEl.textContent = 'နေ့စဉ် Ads Count များကို တိုက်စစ်နေပါသည်...';
+
+    try {
+        const today = dailyTop3Today();
+
+        const [adsSnap, publicSnap] = await Promise.all([
+            db.collection('adWatches').where('date', '==', today).get(),
+            db.collection('publicLeaderboard').where('date', '==', today).get()
+        ]);
+
+        const adsMap = new Map();
+        adsSnap.forEach(doc => {
+            const d = doc.data() || {};
+            const uid = d.userId || d.authUid;
+            if (!uid) return;
+
+            const count = Number(d.count || 0);
+            const coins = Number(d.totalCoins || 0);
+            if (!Number.isFinite(count) || count < 0) return;
+
+            const old = adsMap.get(uid) || { count: 0, coins: 0 };
+            old.count += count;
+            old.coins += Number.isFinite(coins) ? coins : 0;
+            adsMap.set(uid, old);
+        });
+
+        const publicMap = new Map();
+        publicSnap.forEach(doc => {
+            const d = doc.data() || {};
+            const uid = d.userId;
+            if (!uid) return;
+
+            publicMap.set(uid, {
+                count: Number(d.count || 0),
+                coins: Number(d.totalCoins || 0)
+            });
+        });
+
+        const uids = new Set([...adsMap.keys(), ...publicMap.keys()]);
+        const mismatches = [];
+
+        for (const uid of uids) {
+            const a = adsMap.get(uid) || { count: 0, coins: 0 };
+            const b = publicMap.get(uid) || { count: 0, coins: 0 };
+
+            if (a.count !== b.count || a.coins !== b.coins) {
+                mismatches.push({
+                    uid,
+                    adWatchesCount: a.count,
+                    publicCount: b.count,
+                    adWatchesCoins: a.coins,
+                    publicCoins: b.coins
+                });
+            }
+        }
+
+        console.table(mismatches);
+
+        const message = mismatches.length
+            ? `⚠️ ${today}: Count မတူသော User ${mismatches.length} ယောက်ရှိသည်။ Console ထဲတွင် အသေးစိတ်ကြည့်ပါ။`
+            : `✅ ${today}: adWatches ${adsMap.size} ယောက်၊ publicLeaderboard ${publicMap.size} ယောက်။ Count/Coins ကွာခြားမှု မတွေ့ပါ။`;
+
+        if (statusEl) statusEl.textContent = message;
+        console.log('Daily Top 3 audit:', {
+            date: today,
+            adWatchesUsers: adsMap.size,
+            publicLeaderboardUsers: publicMap.size,
+            mismatchCount: mismatches.length,
+            mismatches
+        });
+
+        showToast(message, mismatches.length ? 'error' : 'success');
+    } catch (e) {
+        console.error('DAILY TOP3 AUDIT ERROR:', e);
+        if (statusEl) {
+            statusEl.textContent = '❌ စစ်ဆေးမှု မအောင်မြင်ပါ: ' + (e.code || e.message);
+        }
+    }
+}
+
+async function prepareDailyTop3Rewards() {
+    if (!isAdmin) {
+        showToast('❌ Admin login လုပ်ပါ', 'error');
+        return;
+    }
+
+    const statusEl = document.getElementById('dailyTop3RewardStatus');
+    if (statusEl) statusEl.textContent = 'ယနေ့ Ads စာရင်းကို စစ်ဆေးနေပါသည်...';
+
+    try {
+        const today = dailyTop3Today();
+        const snap = await db.collection('adWatches')
+            .where('date', '==', today)
+            .get();
+
+        const records = [];
+        snap.forEach(doc => {
+            const d = doc.data() || {};
+            const uid = d.userId || d.authUid;
+            const count = Number(d.count || 0);
+
+            if (uid && Number.isFinite(count) && count > 0) {
+                records.push({
+                    uid,
+                    count,
+                    totalCoins: Number(d.totalCoins || 0),
+                    username: d.username || 'User',
+                    email: d.email || ''
+                });
+            }
+        });
+
+        // Rank by number of ads, not coins earned.
+        // Ties use totalCoins, then username for deterministic ordering.
+        records.sort((a, b) =>
+            b.count - a.count ||
+            b.totalCoins - a.totalCoins ||
+            String(a.username).localeCompare(String(b.username))
+        );
+
+        const top = [];
+        const seen = new Set();
+        for (const record of records) {
+            if (seen.has(record.uid)) continue;
+            seen.add(record.uid);
+            top.push(record);
+            if (top.length === 3) break;
+        }
+
+        const rewards = db.collection('dailyTop3Rewards');
+        const oldSnap = await rewards.where('date', '==', today).get();
+
+        // Once any reward is approved, freeze today's ranking.
+        const alreadyApproved = oldSnap.docs.some(doc => {
+            const data = doc.data() || {};
+            return data.status === 'approved';
+        });
+
+        if (alreadyApproved) {
+            if (statusEl) {
+                statusEl.textContent =
+                    '🔒 ယနေ့ ဆုတစ်ခု အတည်ပြုပြီးဖြစ်သောကြောင့် Ranking အသစ် မပြင်ဆင်နိုင်ပါ။';
+            }
+            await loadDailyTop3Rewards();
+            return;
+        }
+
+        const currentIds = new Set(
+            top.map((r, i) => `${today}_${r.uid}`)
+        );
+
+        // Mark old pending nominations as superseded when the ranking changes.
+        // Approved records are never reset or paid a second time.
+        const batch = db.batch();
+        let batchHasWrites = false;
+
+        oldSnap.forEach(doc => {
+            const d = doc.data() || {};
+            if (d.status === 'pending' && !currentIds.has(doc.id)) {
+                batch.update(doc.ref, {
+                    status: 'superseded',
+                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                batchHasWrites = true;
+            }
+        });
+
+        top.forEach((r, i) => {
+            const ref = rewards.doc(`${today}_${r.uid}`);
+            // Existing approved/rejected decisions must not be overwritten.
+            // Existing pending entries will be refreshed with today's ranking.
+            const existing = oldSnap.docs.find(d => d.id === ref.id);
+            if (existing) {
+                const old = existing.data() || {};
+                if (old.status === 'approved' || old.status === 'rejected') {
+                    return;
+                }
+            }
+
+            batch.set(ref, {
+                date: today,
+                userId: r.uid,
+                username: r.username,
+                email: r.email,
+                ads: r.count,
+                totalCoins: r.totalCoins,
+                rank: i + 1,
+                rewardCoins: DAILY_TOP3_PRIZES[i],
+                status: 'pending',
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
+            batchHasWrites = true;
+        });
+
+        if (batchHasWrites) await batch.commit();
+
+        if (statusEl) {
+            statusEl.textContent = top.length
+                ? `📅 ${today} — Top ${top.length} စာရင်းပြင်ဆင်ပြီးပါပြီ။ Approve မလုပ်မချင်း Coin မပေးပါ။`
+                : `📅 ${today} — ယနေ့ Ads မှတ်တမ်း မရှိသေးပါ။`;
+        }
+
+        await loadDailyTop3Rewards();
+    } catch (e) {
+        console.error('DAILY TOP3 PREPARE ERROR:', e);
+        if (statusEl) {
+            statusEl.textContent = '❌ ' + (e.code || e.message || 'Failed');
+        }
+        showToast('Daily Top 3 စာရင်းမရပါ: ' + (e.code || 'Error'), 'error');
+    }
+}
+
+async function loadDailyTop3Rewards() {
+    const listEl = document.getElementById('dailyTop3RewardList');
+    const statusEl = document.getElementById('dailyTop3RewardStatus');
+    if (!listEl || !isAdmin) return;
+
+    try {
+        const today = dailyTop3Today();
+        const snap = await db.collection('dailyTop3Rewards')
+            .where('date', '==', today)
+            .get();
+
+        const rows = [];
+        snap.forEach(doc => rows.push({ id: doc.id, ...doc.data() }));
+        rows.sort((a, b) => Number(a.rank || 99) - Number(b.rank || 99));
+
+        if (!rows.length) {
+            listEl.innerHTML =
+                '<div class="table-loading">စာရင်းမရှိသေးပါ။ အပေါ်က ခလုတ်ကိုနှိပ်ပါ။</div>';
+            return;
+        }
+
+        listEl.innerHTML = rows.map(r => {
+            const rank = Number(r.rank || 0);
+            const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : '🏅';
+            const pending = r.status === 'pending';
+            const safeId = dailyTop3Escape(r.id);
+            return `
+                <div style="padding:12px;margin-bottom:8px;border:1px solid var(--border-light);border-radius:12px;">
+                    <div style="font-weight:800;">
+                        ${medal} Top ${rank} — ${dailyTop3Escape(r.username || 'User')}
+                    </div>
+                    <div style="font-size:11px;color:var(--text-3);margin-top:4px;overflow-wrap:anywhere;">
+                        ${dailyTop3Escape(r.email || r.userId || '')}
+                    </div>
+                    <div style="font-size:12px;margin-top:5px;">
+                        Ads: <strong>${Number(r.ads || 0).toLocaleString()}</strong>
+                        · ဆု: <strong>${Number(r.rewardCoins || 0).toLocaleString()} Coins</strong>
+                    </div>
+                    <div style="font-size:12px;margin-top:5px;">
+                        အခြေအနေ: ${dailyTop3Escape(dailyTop3StatusText(r.status))}
+                    </div>
+                    ${pending ? `
+                        <div style="display:flex;gap:8px;margin-top:9px;">
+                            <button class="btn-sm mint"
+                                onclick="approveDailyTop3Reward('${safeId}')"
+                                style="flex:1;">✅ Approve</button>
+                            <button class="btn-sm red"
+                                onclick="rejectDailyTop3Reward('${safeId}')"
+                                style="flex:1;">❌ Reject</button>
+                        </div>` : ''}
+                </div>`;
+        }).join('');
+
+        if (statusEl && !statusEl.textContent) {
+            statusEl.textContent = `📅 ${today}`;
+        }
+    } catch (e) {
+        console.error('DAILY TOP3 LOAD ERROR:', e);
+        listEl.innerHTML =
+            '<div class="table-loading">❌ ' +
+            dailyTop3Escape(e.code || e.message || 'Failed') + '</div>';
+    }
+}
+
+async function approveDailyTop3Reward(rewardId) {
+    if (!isAdmin) {
+        showToast('❌ Admin login လုပ်ပါ', 'error');
+        return;
+    }
+
+    if (!confirm('ဒီနေ့ Top 3 ဆုကို အတည်ပြုပြီး Coin ပေးမလား?')) return;
+
+    try {
+        const rewardRef = db.collection('dailyTop3Rewards').doc(rewardId);
+
+        await db.runTransaction(async tx => {
+            const rewardSnap = await tx.get(rewardRef);
+            if (!rewardSnap.exists) throw new Error('Reward record မရှိပါ');
+
+            const r = rewardSnap.data() || {};
+            if (r.status !== 'pending') {
+                throw new Error('ဒီဆုကို ဆုံးဖြတ်ပြီးသားဖြစ်ပါသည်');
+            }
+
+            const rank = Number(r.rank);
+            const expectedPrize = DAILY_TOP3_PRIZES[rank - 1];
+            const prize = Number(r.rewardCoins);
+
+            if (!r.userId || !r.date ||
+                !Number.isInteger(rank) || rank < 1 || rank > 3 ||
+                prize !== expectedPrize) {
+                throw new Error('ဆုစာရင်း မမှန်ကန်ပါ');
+            }
+
+            const userRef = db.collection('users').doc(r.userId);
+            const userSnap = await tx.get(userRef);
+            if (!userSnap.exists) throw new Error('User မရှိတော့ပါ');
+
+            tx.update(userRef, {
+                coins: firebase.firestore.FieldValue.increment(prize)
+            });
+
+            tx.update(rewardRef, {
+                status: 'approved',
+                approvedCoins: prize,
+                approvedAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+
+            const txRef = db.collection('transactions').doc();
+            tx.set(txRef, {
+                userId: r.userId,
+                type: 'daily_top3_reward',
+                amount: prize,
+                description: `Daily Top ${rank} Ads Reward (${r.date})`,
+                timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            });
+        });
+
+        showToast('✅ ဆု Coin ပေးပြီးပါပြီ', 'success');
+        await loadDailyTop3Rewards();
+        await loadAdminUsers();
+    } catch (e) {
+        console.error('DAILY TOP3 APPROVE ERROR:', e);
+        showToast('❌ ' + (e.code || e.message || 'Approve failed'), 'error');
+    }
+}
+
+async function rejectDailyTop3Reward(rewardId) {
+    if (!isAdmin) {
+        showToast('❌ Admin login လုပ်ပါ', 'error');
+        return;
+    }
+
+    if (!confirm('ဒီဆုလျှောက်ထားမှုကို Reject လုပ်မှာ သေချာပါသလား?')) return;
+
+    try {
+        const ref = db.collection('dailyTop3Rewards').doc(rewardId);
+        await db.runTransaction(async tx => {
+            const snap = await tx.get(ref);
+            if (!snap.exists) throw new Error('Reward record မရှိပါ');
+            const r = snap.data() || {};
+            if (r.status !== 'pending') {
+                throw new Error('ဒီဆုကို ဆုံးဖြတ်ပြီးသားဖြစ်ပါသည်');
+            }
+            tx.update(ref, {
+                status: 'rejected',
+                rejectedAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+        });
+
+        showToast('ဆုစာရင်းကို Reject လုပ်ပြီးပါပြီ');
+        await loadDailyTop3Rewards();
+    } catch (e) {
+        console.error('DAILY TOP3 REJECT ERROR:', e);
+        showToast('❌ ' + (e.code || e.message || 'Reject failed'), 'error');
+    }
+}
+
+
+async function adminAddCoin() {
+    const email = document.getElementById('adminTargetEmail').value.trim();
+    const amount = parseInt(document.getElementById('adminCoinAmount').value);
+    const msg = document.getElementById('adminCoinMsg');
+    if (!email || !amount) { msg.textContent = '❌ Fill'; msg.style.color = 'var(--rose-500)'; return; }
+    const snap = await db.collection('users').where('email', '==', email).limit(1).get();
+    if (snap.empty) { msg.textContent = '❌ Not found'; msg.style.color = 'var(--rose-500)'; return; }
+    await db.collection('users').doc(snap.docs[0].id).update({ coins: firebase.firestore.FieldValue.increment(amount) });
+    msg.textContent = '✅ +' + amount;
+    msg.style.color = 'var(--mint-600)';
+}
+async function adminRemoveCoin() {
+    const email = document.getElementById('adminTargetEmail').value.trim();
+    const amount = parseInt(document.getElementById('adminCoinAmount').value);
+    const msg = document.getElementById('adminCoinMsg');
+    if (!email || !amount) { msg.textContent = '❌ Fill'; msg.style.color = 'var(--rose-500)'; return; }
+    const snap = await db.collection('users').where('email', '==', email).limit(1).get();
+    if (snap.empty) { msg.textContent = '❌ Not found'; msg.style.color = 'var(--rose-500)'; return; }
+    await db.collection('users').doc(snap.docs[0].id).update({ coins: firebase.firestore.FieldValue.increment(-amount) });
+    msg.textContent = '✅ -' + amount;
+    msg.style.color = 'var(--rose-500)';
+}
+
+async function adminAddMmk() {
+    const email = document.getElementById('adminMmkTargetEmail').value.trim();
+    const amount = Number(document.getElementById('adminMmkAmount').value);
+    const msg = document.getElementById('adminMmkMsg');
+
+    if (!email || !Number.isFinite(amount) || amount <= 0) {
+        msg.textContent = '❌ Email နှင့် MMK ပမာဏ ဖြည့်ပါ';
+        msg.style.color = 'var(--rose-500)';
+        return;
+    }
+
+    try {
+        const snap = await db.collection('users')
+            .where('email', '==', email)
+            .limit(1)
+            .get();
+
+        if (snap.empty) {
+            msg.textContent = '❌ User မတွေ့ပါ';
+            msg.style.color = 'var(--rose-500)';
+            return;
+        }
+
+        const ref = snap.docs[0].ref;
+
+        await ref.update({
+            mmkBalance: firebase.firestore.FieldValue.increment(amount)
+        });
+
+        msg.textContent = '✅ MMK +' + amount.toLocaleString();
+        msg.style.color = 'var(--mint-600)';
+
+        loadAdminUsers();
+    } catch (e) {
+        console.error('ADMIN ADD MMK ERROR:', e);
+        msg.textContent = '❌ ' + (e.code || 'Failed');
+        msg.style.color = 'var(--rose-500)';
+    }
+}
+
+async function adminRemoveMmk() {
+    const email = document.getElementById('adminMmkTargetEmail').value.trim();
+    const amount = Number(document.getElementById('adminMmkAmount').value);
+    const msg = document.getElementById('adminMmkMsg');
+
+    if (!email || !Number.isFinite(amount) || amount <= 0) {
+        msg.textContent = '❌ Email နှင့် MMK ပမာဏ ဖြည့်ပါ';
+        msg.style.color = 'var(--rose-500)';
+        return;
+    }
+
+    try {
+        const snap = await db.collection('users')
+            .where('email', '==', email)
+            .limit(1)
+            .get();
+
+        if (snap.empty) {
+            msg.textContent = '❌ User မတွေ့ပါ';
+            msg.style.color = 'var(--rose-500)';
+            return;
+        }
+
+        const ref = snap.docs[0].ref;
+        const data = snap.docs[0].data();
+        const currentMmk = Math.max(0, Number(data.mmkBalance || 0));
+
+        if (amount > currentMmk) {
+            msg.textContent = '❌ MMK လက်ကျန်ထက် မပိုနိုင်ပါ';
+            msg.style.color = 'var(--rose-500)';
+            return;
+        }
+
+        await ref.update({
+            mmkBalance: currentMmk - amount
+        });
+
+        msg.textContent = '✅ MMK −' + amount.toLocaleString();
+        msg.style.color = 'var(--rose-500)';
+
+        loadAdminUsers();
+    } catch (e) {
+        console.error('ADMIN REMOVE MMK ERROR:', e);
+        msg.textContent = '❌ ' + (e.code || 'Failed');
+        msg.style.color = 'var(--rose-500)';
+    }
+}
+
+async function loadAdminUsers() {
+    const table = document.getElementById('adminUserTable');
+
+    table.innerHTML = '<tr><td colspan="5" class="table-loading"><i class="fas fa-spinner fa-spin"></i></td></tr>';
+
+    try {
+        const snap = await db.collection('users').limit(100).get();
+
+        const now = Date.now();
+        const ACTIVE_MS = 24 * 60 * 60 * 1000;
+
+        const users = snap.docs.map(doc => {
+            const d = doc.data();
+
+            let lastActiveMs = 0;
+
+            if (d.lastActive?.toMillis) {
+                lastActiveMs = d.lastActive.toMillis();
+            } else if (d.lastActive?.seconds) {
+                lastActiveMs = d.lastActive.seconds * 1000;
+            } else if (d.lastActive) {
+                const parsed = new Date(d.lastActive).getTime();
+                if (Number.isFinite(parsed)) lastActiveMs = parsed;
+            }
+
+            const isActive = lastActiveMs > 0 && (now - lastActiveMs) <= ACTIVE_MS;
+
+            return {
+                id: doc.id,
+                data: d,
+                isActive
+            };
+        });
+
+        const activeUsers = users.filter(u => u.isActive);
+        const inactiveUsers = users.filter(u => !u.isActive);
+
+        document.getElementById('userCount').textContent =
+            `${activeUsers.length} 🟢 / ${inactiveUsers.length} ⚫`;
+
+        const renderUser = ({ id, data: d, isActive }) => {
+            const email = d.email || '—';
+            const mmk = Number(d.mmkBalance ?? d.mmk ?? 0);
+            const coins = Number(d.coins ?? 0);
+
+            const username = d.username
+                ? (String(d.username).startsWith('@')
+                    ? String(d.username)
+                    : '@' + String(d.username))
+                : '—';
+
+            const status = isActive
+                ? '<span style="color:var(--mint-600);font-weight:800;">🟢 Active</span>'
+                : '<span style="color:var(--text-3);font-weight:800;">⚫ Inactive</span>';
+
+            return `<tr>
+                <td>
+                    <strong>${email}</strong>
+                    <br>
+                    <small style="color:var(--text-3);">${username}</small>
+                </td>
+                <td><strong>${mmk.toLocaleString()}</strong></td>
+                <td><strong>${coins.toLocaleString()}</strong></td>
+                <td>${status}</td>
+                <td>
+                    <button class="btn-sm ${d.isBanned ? 'mint' : 'red'}"
+                        onclick="toggleBan('${id}')"
+                        style="padding:5px 10px;font-size:10px;">
+                        ${d.isBanned ? 'Unban' : 'Ban'}
+                    </button>
+                </td>
+            </tr>`;
+        };
+
+        const activeHtml = activeUsers.map(renderUser).join('');
+        const inactiveHtml = inactiveUsers.map(renderUser).join('');
+
+        let htmlOut = '';
+
+        if (activeHtml) {
+            htmlOut += `
+                <tr>
+                    <td colspan="5" style="padding:8px 6px;color:var(--mint-600);font-weight:900;">
+                        🟢 ACTIVE USERS (${activeUsers.length})
+                    </td>
+                </tr>
+                ${activeHtml}`;
+        }
+
+        if (inactiveHtml) {
+            htmlOut += `
+                <tr>
+                    <td colspan="5" style="padding:8px 6px;color:var(--text-3);font-weight:900;">
+                        ⚫ INACTIVE USERS (${inactiveUsers.length})
+                    </td>
+                </tr>
+                ${inactiveHtml}`;
+        }
+
+        if (!htmlOut) {
+            htmlOut = '<tr><td colspan="5" class="table-loading">No users</td></tr>';
+        }
+
+        table.innerHTML = htmlOut;
+
+    } catch (e) {
+        console.error('REALCASH ADMIN USERS ERROR:', e);
+        console.error('Firebase currentUser:', auth.currentUser);
+
+        const code = e && e.code ? e.code : 'unknown';
+        const msg = e && e.message ? e.message : String(e);
+        const firebaseUid = auth.currentUser
+            ? auth.currentUser.uid
+            : 'NOT_SIGNED_IN';
+
+        table.innerHTML = `<tr>
+            <td colspan="5" class="table-loading"
+                style="color:var(--rose-500);font-size:12px;line-height:1.6;">
+                ❌ Firebase Error<br>
+                <small>Code: ${code}</small><br>
+                <small style="color:#fca5a5;">${msg}</small><br>
+                <small style="color:#fbbf24;">Firebase UID: ${firebaseUid}</small>
+            </td>
+        </tr>`;
+    }
+}
+
+async function searchUserByEmail() {
+    const email = document.getElementById('userSearchInput').value.trim();
+    if (!email) return;
+    const table = document.getElementById('adminUserTable');
+    const snap = await db.collection('users').where('email', '==', email).limit(1).get();
+    if (snap.empty) { table.innerHTML = '<tr><td colspan="4" class="table-loading">Not found</td></tr>'; return; }
+    const doc = snap.docs[0];
+    const d = doc.data();
+    table.innerHTML = `<tr>
+        <td><strong>${d.username}</strong><br><span style="font-size:10px;color:var(--text-3);">${d.email}</span></td>
+        <td>${d.coins || 0}</td>
+        <td>${(d.usdt || 0).toFixed(2)}</td>
+        <td><button class="btn-sm ${d.isBanned ? 'mint' : 'red'}" onclick="toggleBan('${doc.id}')">${d.isBanned ? 'Unban' : 'Ban'}</button></td>
+    </tr>`;
+}
+function clearUserSearch() { document.getElementById('userSearchInput').value = ''; loadAdminUsers(); }
+async function toggleBan(uid) {
+    const doc = await db.collection('users').doc(uid).get();
+    if (!doc.exists) return;
+    await db.collection('users').doc(uid).update({ isBanned: !doc.data().isBanned });
+    showToast('✅ Updated');
+    loadAdminUsers();
+}
+async function loadPaidLevelRequests() {
+    const tbody = document.getElementById('paidLevelRequestsBody');
+    if (!tbody || !isAdmin) return;
+    try {
+        const snap = await db.collection('levelUpgradeRequests')
+            .orderBy('createdAt', 'desc').limit(100).get();
+        if (snap.empty) {
+            tbody.innerHTML = '<tr><td colspan="3" class="table-loading">No paid level requests</td></tr>';
+            return;
+        }
+        tbody.innerHTML = snap.docs.map(doc => {
+            const d = doc.data();
+            const username = escapeAdAccessText(d.username || 'User');
+            const email = escapeAdAccessText(d.email || '');
+            const method = escapeAdAccessText(d.paymentMethod || '');
+            const reference = escapeAdAccessText(d.reference || '');
+            const status = escapeAdAccessText(d.status || 'unknown');
+            const actions = d.status === 'pending'
+                ? `<button class="btn-sm mint" onclick="processPaidLevelRequest('${doc.id}','approved')">Approve</button>
+                   <button class="btn-sm red" onclick="processPaidLevelRequest('${doc.id}','rejected')">Reject</button>`
+                : status;
+            return `<tr>
+                <td><strong>${username}</strong><br><small>${email}</small><br>LV${Number(d.fromLevel)||1} → LV${Number(d.toLevel)||1}<br><b>${Number(d.amountMMK)||0} MMK</b></td>
+                <td>${method}<br><b>ID: ${reference}</b></td>
+                <td>${actions}</td>
+            </tr>`;
+        }).join('');
+    } catch (e) {
+        console.error('Load paid level requests:', e);
+        tbody.innerHTML = '<tr><td colspan="3">Request ဖတ်မရပါ: ' + escapeAdAccessText(e.code || e.message) + '</td></tr>';
+    }
+}
+
+
+async function processPaidLevelRequest(id, status) {
+    if (!isAdmin || !auth.currentUser || !['approved', 'rejected'].includes(status)) return;
+
+    if (!confirm(status === 'approved'
+        ? '5,000 MMK ငွေလွှဲမှုကို စစ်ဆေးပြီး ဒီ Level ကို Approve လုပ်မလား?'
+        : 'ဒီ Paid Level Request ကို Reject လုပ်မလား?')) return;
+
+    try {
+        const reqRef = db.collection('levelUpgradeRequests').doc(id);
+
+        const result = await db.runTransaction(async tx => {
+            const req = await tx.get(reqRef);
+            if (!req.exists) throw new Error('REQUEST_NOT_FOUND');
+
+            const d = req.data();
+            if (d.status !== 'pending') throw new Error('ALREADY_PROCESSED');
+
+            if (status === 'approved') {
+                const userRef = db.collection('users').doc(d.userId);
+                const userSnap = await tx.get(userRef);
+                if (!userSnap.exists) throw new Error('USER_NOT_FOUND');
+
+                const ud = userSnap.data();
+                const adsLevel = getLevelFromAds(Number(ud.totalAds) || 0);
+                const effectiveLevel = Math.max(Number(ud.level) || 1, adsLevel);
+                const targetLevel = Number(d.toLevel);
+
+                if (!Number.isInteger(targetLevel) || targetLevel < 2 || targetLevel > MAX_LEVEL)
+                    throw new Error('INVALID_TARGET_LEVEL');
+
+                if (effectiveLevel < 1 || effectiveLevel >= MAX_LEVEL ||
+                    Number(d.fromLevel) !== effectiveLevel ||
+                    targetLevel !== effectiveLevel + 1)
+                    throw new Error('LEVEL_CHANGED');
+
+                if (Number(d.amountMMK) !== 5000 ||
+                    !['WavePay', 'KPay'].includes(d.paymentMethod) ||
+                    !/^\d{5}$/.test(String(d.reference || '')))
+                    throw new Error('INVALID_PAYMENT_DETAILS');
+
+                tx.update(userRef, {
+                    level: targetLevel,
+                    levelPurchasedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    levelPurchaseRequestId: id
+                });
+            }
+
+            tx.update(reqRef, {
+                status: status,
+                processedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                processedBy: auth.currentUser.uid
+            });
+
+            return d;
+        });
+
+        const title = status === 'approved'
+            ? '✅ Level Upgrade Approved'
+            : '❌ Level Upgrade Rejected';
+
+        const message = status === 'approved'
+            ? `သင်၏ Paid Level Upgrade Request (LV${Number(result.fromLevel) || 1} → LV${Number(result.toLevel) || 0}) ကို Admin မှ Approve လုပ်ပြီးပါပြီ။`
+            : `သင်၏ Paid Level Upgrade Request (LV${Number(result.fromLevel) || 1} → LV${Number(result.toLevel) || 0}) ကို Admin မှ Reject လုပ်ထားပါသည်။`;
+
+        const notified = await createAutomaticUserNotification(result.userId, title, message);
+
+        showToast(
+            (status === 'approved'
+                ? '✅ Paid Level Approved — User Level Updated'
+                : 'Paid Level Request Rejected') +
+            (notified ? ' — Notification Sent' : ' — Notification မပို့နိုင်ပါ'),
+            'success'
+        );
+
+        await loadPaidLevelRequests();
+    } catch (e) {
+        console.error('Process paid level request:', e);
+        const msg = e.message === 'LEVEL_CHANGED'
+            ? 'User Level ပြောင်းလဲနေပါသည်။ Request ကိုစစ်ဆေးပါ။'
+            : e.message === 'ALREADY_PROCESSED'
+                ? 'ဒီ Request ကို အရင်က စီမံပြီးပါပြီ။'
+                : (e.code || e.message);
+
+        showToast('မအောင်မြင်ပါ: ' + msg, 'error');
+        await loadPaidLevelRequests();
+    }
+}
+
+
+async function loadFreeLevelRequests() {
+    const tbody = document.getElementById('freeLevelRequestsBody');
+    if (!tbody) return;
+
+    try {
+        const snap = await db.collection('freeLevelRequests')
+            .orderBy('createdAt', 'desc').limit(50).get();
+
+        if (snap.empty) {
+            tbody.innerHTML = '<tr><td colspan="3">No requests</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = snap.docs.map(doc => {
+            const d = doc.data();
+            const actions = d.status === 'pending'
+                ? `<button class="btn-sm mint" onclick="processFreeLevelRequest('${doc.id}','approved')">Approve</button>
+                   <button class="btn-sm red" onclick="processFreeLevelRequest('${doc.id}','rejected')">Reject</button>`
+                : String(d.status || 'unknown');
+
+            return `<tr>
+                <td>${d.username || 'User'}<br><small>${d.email || ''}</small></td>
+                <td>LV${Number(d.fromLevel) || 1} → LV${Number(d.toLevel) || 1}</td>
+                <td>${actions}</td>
+            </tr>`;
+        }).join('');
+
+    } catch (e) {
+        console.error('Load free requests:', e);
+        tbody.innerHTML = '<tr><td colspan="3">Request ဖတ်မရပါ: ' + (e.code || e.message) + '</td></tr>';
+    }
+}
+
+
+async function processFreeLevelRequest(id, status) {
+    if (!isAdmin || !auth.currentUser || !['approved', 'rejected'].includes(status)) return;
+
+    const promptText = status === 'approved'
+        ? 'ဒီ Free Level Request ကို Approve လုပ်မလား?'
+        : 'ဒီ Request ကို Reject လုပ်မလား?';
+
+    if (!confirm(promptText)) return;
+
+    try {
+        const reqRef = db.collection('freeLevelRequests').doc(id);
+
+        const result = await db.runTransaction(async tx => {
+            const req = await tx.get(reqRef);
+            if (!req.exists) throw new Error('REQUEST_NOT_FOUND');
+
+            const d = req.data();
+            if (d.status !== 'pending') throw new Error('ALREADY_PROCESSED');
+
+            if (status === 'approved') {
+                const userRef = db.collection('users').doc(d.userId);
+                const user = await tx.get(userRef);
+                if (!user.exists) throw new Error('USER_NOT_FOUND');
+
+                const ud = user.data();
+                const adsLevel = getLevelFromAds(Number(ud.totalAds) || 0);
+                const effectiveLevel = Math.max(Number(ud.level) || 1, adsLevel);
+                const targetLevel = Number(d.toLevel);
+
+                if (!Number.isInteger(targetLevel) || targetLevel < 1 || targetLevel > MAX_AD_LEVEL)
+                    throw new Error('INVALID_TARGET_LEVEL');
+
+                if (targetLevel > effectiveLevel + 1)
+                    throw new Error('LEVEL_CHANGED');
+
+                if (targetLevel > effectiveLevel) {
+                    tx.update(userRef, { level: targetLevel });
+                }
+            }
+
+            tx.update(reqRef, {
+                status,
+                processedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                processedBy: auth.currentUser.uid
+            });
+
+            return d;
+        });
+
+        const title = status === 'approved'
+            ? '✅ Free Level Approved'
+            : '❌ Free Level Rejected';
+
+        const message = status === 'approved'
+            ? `သင်၏ Free Level Request (LV${Number(result.fromLevel) || 1} → LV${Number(result.toLevel) || 1}) ကို Approve လုပ်ပြီးပါပြီ။`
+            : `သင်၏ Free Level Request (LV${Number(result.fromLevel) || 1} → LV${Number(result.toLevel) || 1}) ကို Reject လုပ်ထားပါသည်။`;
+
+        const notified = await createAutomaticUserNotification(result.userId, title, message);
+
+        showToast(
+            (status === 'approved' ? 'Free VIP Level Approved' : 'Request Rejected') +
+            (notified ? ' — Notification Sent' : ' — Notification မပို့နိုင်ပါ'),
+            'success'
+        );
+
+        await loadFreeLevelRequests();
+    } catch (e) {
+        console.error('Process free level request:', e);
+        showToast('မအောင်မြင်ပါ: ' + (e.code || e.message), 'error');
+    }
+}
+
+
+async function loadWithdrawRequests() {
+    const tbody = document.getElementById('withdrawRequestsBody');
+    try {
+        const snap = await db.collection('withdrawals').orderBy('requestedAt', 'desc').limit(50).get();
+        if (snap.empty) {
+            tbody.innerHTML = '<tr><td colspan="5" class="table-loading">No requests</td></tr>';
+            return;
+        }
+        tbody.innerHTML = snap.docs.map(doc => {
+            const d = doc.data();
+            const amount = Number(d.amount) || 0;
+            const statusText = d.status === 'pending' ? '⏳ Pending' : d.status === 'approved' ? '✅ Approved' : '❌ Rejected';
+            const payment = `${d.method || '-'}<br><small>${d.accountName || '-'}<br>${d.phone || '-'}</small>`;
+            const action = d.status === 'pending'
+                ? `<button class="btn-sm mint" onclick="approveWithdraw('${doc.id}')" style="padding:4px 8px;font-size:10px;">✓</button>
+                   <button class="btn-sm red" onclick="rejectWithdraw('${doc.id}')" style="padding:4px 8px;font-size:10px;">✕</button>`
+                : '—';
+            return `<tr>
+                <td><strong>${d.username || 'User'}</strong><br><small>${d.email || ''}</small></td>
+                <td><strong>${amount.toLocaleString()} MMK</strong></td>
+                <td>${payment}</td>
+                <td>${statusText}</td>
+                <td>${action}</td>
+            </tr>`;
+        }).join('');
+    } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="5" class="table-loading">Request list မဖတ်နိုင်ပါ</td></tr>';
+    }
+}
+
+async function approveWithdraw(id) {
+    if (!isAdmin || !auth.currentUser) return;
+    if (!confirm('ဒီ Withdrawal Request ကို Approved လုပ်မလား?')) return;
+
+    try {
+        const ref = db.collection('withdrawals').doc(id);
+
+        const result = await db.runTransaction(async tx => {
+            const snap = await tx.get(ref);
+            if (!snap.exists) throw new Error('NOT_FOUND');
+
+            const d = snap.data();
+            if (d.status !== 'pending') throw new Error('ALREADY_PROCESSED');
+
+            tx.update(ref, {
+                status: 'approved',
+                processedAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+
+            return d;
+        });
+
+        const notified = await createAutomaticUserNotification(
+            result.userId,
+            '✅ Withdrawal Approved',
+            `သင်၏ ${Number(result.amount || 0).toLocaleString()} MMK Withdrawal Request ကို Approve လုပ်ပြီးပါပြီ။`
+        );
+
+        showToast(
+            `✅ ${Number(result.amount || 0).toLocaleString()} MMK Approved` +
+            (notified ? ' — Notification Sent' : ' — Notification မပို့နိုင်ပါ')
+        );
+
+        loadWithdrawRequests();
+    } catch (e) {
+        showToast(
+            e.message === 'ALREADY_PROCESSED' ? 'Already processed' : '❌ Approve failed',
+            'error'
+        );
+    }
+}
+
+
+
+async function rejectWithdraw(id) {
+    if (!isAdmin || !auth.currentUser) return;
+    if (!confirm('ဒီ Withdrawal Request ကို Reject လုပ်မလား?')) return;
+
+    try {
+        const ref = db.collection('withdrawals').doc(id);
+
+        const result = await db.runTransaction(async tx => {
+            const snap = await tx.get(ref);
+            if (!snap.exists) throw new Error('NOT_FOUND');
+
+            const d = snap.data();
+            if (d.status !== 'pending') throw new Error('ALREADY_PROCESSED');
+
+            const userRef = db.collection('users').doc(d.userId);
+            const userSnap = await tx.get(userRef);
+            if (!userSnap.exists) throw new Error('USER_NOT_FOUND');
+
+            const balance = Math.max(0, Number(userSnap.data().mmkBalance) || 0);
+
+            tx.update(userRef, {
+                mmkBalance: balance + (Number(d.amount) || 0)
+            });
+
+            tx.update(ref, {
+                status: 'rejected',
+                processedAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+
+            return d;
+        });
+
+        const notified = await createAutomaticUserNotification(
+            result.userId,
+            '❌ Withdrawal Rejected',
+            `သင်၏ ${Number(result.amount || 0).toLocaleString()} MMK Withdrawal Request ကို Reject လုပ်ပြီး ငွေပြန်အမ်းပေးထားပါသည်။`
+        );
+
+        showToast(
+            `↩️ ${Number(result.amount || 0).toLocaleString()} MMK ပြန်အမ်းပြီး Reject လုပ်ပြီးပါပြီ` +
+            (notified ? ' — Notification Sent' : ' — Notification မပို့နိုင်ပါ')
+        );
+
+        loadWithdrawRequests();
+    } catch (e) {
+        showToast(
+            e.message === 'ALREADY_PROCESSED' ? 'Already processed' : '❌ Reject failed',
+            'error'
+        );
+    }
+}
+
+
+// ============================================================
+//  UTILITIES
+// ============================================================
+let isDark = false; // Default Light Mode
+
+function toggleTheme() {
+    isDark = !isDark;
+    document.body.classList.toggle('dark-mode', isDark);
+    const icon = document.querySelector('#themeToggleBtn');
+    if (icon) icon.className = isDark ? 'fas fa-sun' : 'fas fa-moon';
+    const drawerIcon = document.getElementById('drawerThemeIcon');
+    if (drawerIcon) drawerIcon.className = isDark ? 'fas fa-sun' : 'fas fa-moon';
+    localStorage.setItem('theme', isDark ? 'dark' : 'light');
+}
+
+if (localStorage.getItem('theme') === 'dark') {
+    isDark = true;
+    document.body.classList.add('dark-mode');
+    document.querySelector('#themeToggleBtn').className = 'fas fa-sun';
+    const drawerIcon = document.getElementById('drawerThemeIcon');
+    if (drawerIcon) drawerIcon.className = 'fas fa-sun';
+}
+
+function openModal(id) {
+    const el = document.getElementById(id);
+    if (!el) {
+        console.warn('Modal not found:', id);
+        return;
+    }
+    el.classList.add('show');
+
+    // Load Paid VIP payment details and request status when Level Modal opens.
+    if (id === 'levelModal') {
+        if (currentUser) {
+            Promise.allSettled([
+                loadLevelPaymentAccounts(),
+                loadPaidLevelRequestStatus(true)
+            ]).then(results => {
+                results.forEach(result => {
+                    if (result.status === 'rejected') {
+                        console.warn('Level modal data load failed:', result.reason);
+                    }
+                });
+            });
+        } else {
+            const status = document.getElementById('paidLevelRequestStatus');
+            if (status) status.textContent = 'Request တင်ရန် Login အရင်ဝင်ပါ။';
+        }
+    }
+}
+function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+document.querySelectorAll('.modal').forEach(el => {
+    el.addEventListener('click', (e) => { if (e.target === el) el.classList.remove('show'); });
+});
+
+// ============================================================
+// NOTIFICATION CENTER
+// ============================================================
+let notificationCache = [];
+let notificationCacheUid = null;
+let notificationUnsubscribe = null;
+let notificationListenerUid = null;
+let notificationInitialSnapshot = false;
+
+function resetNotificationState() {
+    if (typeof notificationUnsubscribe === 'function') {
+        notificationUnsubscribe();
+    }
+
+    notificationUnsubscribe = null;
+    notificationListenerUid = null;
+    notificationInitialSnapshot = false;
+    notificationCache = [];
+    notificationCacheUid = null;
+
+    const badge = document.getElementById('drawerNotificationBadge');
+    if (badge) {
+        badge.textContent = '0';
+        badge.style.display = 'none';
+    }
+
+    const list = document.getElementById('notificationList');
+    if (list) list.innerHTML = '';
+}
+
+function escapeNotificationText(value) {
+    return String(value || '').replace(/[&<>"']/g, ch => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+    })[ch]);
+}
+
+async function refreshNotificationBadge() {
+    if (!currentUser) return;
+
+    const uid = currentUser.uid;
+
+    try {
+        const snap = await db.collection('notifications')
+            .doc(uid)
+            .collection('items')
+            .where('read', '==', false)
+            .limit(20)
+            .get();
+
+        if (!currentUser || currentUser.uid !== uid) return;
+
+        const count = snap.size;
+        const badge = document.getElementById('drawerNotificationBadge');
+
+        if (badge) {
+            badge.textContent = count >= 20 ? '20+' : String(count);
+            badge.style.display = count > 0 ? 'inline-flex' : 'none';
+        }
+    } catch (error) {
+        console.warn('Notification badge load failed:', error);
+    }
+}
+
+function renderNotifications() {
+    const list = document.getElementById('notificationList');
+    if (!list) return;
+
+    if (!notificationCache.length) {
+        list.innerHTML = `
+            <div style="text-align:center;padding:30px 15px;color:var(--text-muted);">
+                <i class="fas fa-bell-slash" style="font-size:30px;margin-bottom:12px;"></i>
+                <div>No notifications yet</div>
+            </div>`;
+        return;
+    }
+
+    list.innerHTML = notificationCache.map(item => {
+        const title = escapeNotificationText(item.title);
+        const message = escapeNotificationText(item.message);
+        const unread = item.read !== true;
+        const date = item.createdAt && item.createdAt.toDate
+            ? item.createdAt.toDate().toLocaleString('en-GB', {
+                timeZone: 'Asia/Yangon',
+                dateStyle: 'medium',
+                timeStyle: 'short'
+            })
+            : 'Recently';
+
+        return `
+            <div style="padding:15px;margin:10px 0;border-radius:16px;
+                background:var(--bg-card);border:1px solid var(--border-color);
+                ${unread ? 'border-left:4px solid #8b5cf6;' : ''}">
+                <div style="display:flex;justify-content:space-between;gap:8px;">
+                    <strong>${title}</strong>
+                    ${unread ? '<span style="color:#8b5cf6;font-size:11px;">NEW</span>' : ''}
+                </div>
+                <div style="margin-top:9px;line-height:1.6;overflow-wrap:anywhere;">
+                    ${message}
+                </div>
+                <div style="font-size:11px;color:var(--text-muted);margin-top:10px;">
+                    ${escapeNotificationText(date)}
+                </div>
+                ${unread ? `
+                    <button class="btn-primary" style="margin-top:10px;padding:8px 14px;"
+                        onclick="markNotificationRead('${item.id}')">
+                        Mark as read
+                    </button>` : ''}
+            </div>`;
+    }).join('');
+}
+
+
+function startNotificationListener(uid) {
+    if (!uid || !currentUser || currentUser.uid !== uid) return;
+
+    if (notificationListenerUid === uid && notificationUnsubscribe) {
+        return;
+    }
+
+    if (typeof notificationUnsubscribe === 'function') {
+        notificationUnsubscribe();
+    }
+
+    notificationUnsubscribe = null;
+    notificationListenerUid = uid;
+    notificationInitialSnapshot = false;
+
+    notificationUnsubscribe = db.collection('notifications')
+        .doc(uid)
+        .collection('items')
+        .orderBy('createdAt', 'desc')
+        .limit(20)
+        .onSnapshot(snapshot => {
+            if (!currentUser || currentUser.uid !== uid) return;
+
+            const isFirstSnapshot = !notificationInitialSnapshot;
+            notificationInitialSnapshot = true;
+
+            notificationCache = snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            }));
+
+            notificationCacheUid = uid;
+
+            const unreadCount = notificationCache.filter(
+                item => item.read !== true
+            ).length;
+
+            const badge = document.getElementById('drawerNotificationBadge');
+
+            if (badge) {
+                badge.textContent = unreadCount >= 20
+                    ? '20+'
+                    : String(unreadCount);
+
+                badge.style.display = unreadCount > 0
+                    ? 'inline-flex'
+                    : 'none';
+            }
+
+            renderNotifications();
+
+            // Show an alert only for newly added notifications,
+            // not for old notifications during the initial load.
+            if (!isFirstSnapshot) {
+                const added = snapshot.docChanges().filter(
+                    change => change.type === 'added'
+                );
+
+                if (added.length > 0) {
+                    const newest = added[0].doc.data();
+
+                    showToast(
+                        '🔔 ' + (newest.title || 'New notification') +
+                        ': ' + (newest.message || ''),
+                        'success'
+                    );
+                }
+            }
+
+        }, error => {
+            console.error('Realtime notification listener failed:', error);
+        });
+}
+
+async function loadNotifications(forceRefresh = true) {
+    const list = document.getElementById('notificationList');
+
+    if (!currentUser) {
+        if (list) {
+            list.innerHTML =
+                '<div style="padding:20px;text-align:center;">Please login first.</div>';
+        }
+        return;
+    }
+
+    const uid = currentUser.uid;
+
+    if (list && !notificationCache.length) {
+        list.innerHTML =
+            '<div style="padding:25px;text-align:center;">Loading...</div>';
+    }
+
+    startNotificationListener(uid);
+
+    if (notificationCacheUid === uid) {
+        renderNotifications();
+    }
+}
+
+function openNotificationModal() {
+    openModal('notificationModal');
+    loadNotifications(true);
+}
+
+async function markNotificationRead(notificationId) {
+    if (!currentUser || !notificationId) return;
+
+    const uid = currentUser.uid;
+    const item = notificationCache.find(x => x.id === notificationId);
+
+    if (!item || item.read === true) return;
+
+    try {
+        await db.collection('notifications')
+            .doc(uid)
+            .collection('items')
+            .doc(notificationId)
+            .update({
+                read: true,
+                readAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+
+        if (!currentUser || currentUser.uid !== uid) return;
+
+        item.read = true;
+        renderNotifications();
+        await refreshNotificationBadge();
+
+    } catch (error) {
+        console.error('Mark notification read failed:', error);
+        showToast('Notification ကို ဖတ်ပြီးအဖြစ် မပြောင်းနိုင်ပါ', 'error');
+    }
+}
+
+function openHistoryModal() { openModal('historyModal'); setTimeout(loadTransactionHistory, 300); }
+function scrollToAds() { document.getElementById('adsSection').scrollIntoView({ behavior: 'smooth' }); }
+
+function showToast(msg, type = 'success') {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.className = 'toast show ' + type;
+    clearTimeout(el._timeout);
+    el._timeout = setTimeout(() => el.classList.remove('show'), 3500);
+}
+
+function uploadProfileImg(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        localStorage.setItem('profileImg', e.target.result);
+        document.getElementById('profileImg').src = e.target.result;
+        if (document.getElementById('headerAvatar')) document.getElementById('headerAvatar').src = e.target.result;
+        if (document.getElementById('drawerAvatar')) document.getElementById('drawerAvatar').src = e.target.result;
+        applyProfileFrame(userData.profileFrame || 'none');
+        renderFrameShop();
+        showToast('✅ Updated');
+    };
+    reader.readAsDataURL(file);
+}
+async function updateProfile() {
+    const name = document.getElementById('profileName').value.trim();
+    if (!name || !currentUser) return;
+    await db.collection('users').doc(currentUser.uid).update({ username: name });
+    userData.username = name;
+    updateUI();
+    showToast('✅ Updated');
+}
+async function loadTransactionHistory() {
+    const container = document.getElementById('transactionList');
+    if (!currentUser) return;
+    try {
+        const snapshot = await db.collection('transactions').where('userId', '==', currentUser.uid).limit(50).get();
+        const transactions = [];
+        snapshot.forEach(doc => {
+            const data = doc.data();
+            let date = new Date();
+            if (data.timestamp?.seconds) date = new Date(data.timestamp.seconds * 1000);
+            transactions.push({ ...data, _date: date });
+        });
+        if (!transactions.length) { container.innerHTML = '<div class="table-loading">No transactions</div>'; return; }
+        transactions.sort((a, b) => b._date - a._date);
+        const typeMap = {
+            'ad_watch': { icon: '📺', label: 'Ad Watch' },
+            'daily_bonus': { icon: '🎁', label: 'Daily Bonus' },
+            'welcome_bonus': { icon: '🎉', label: 'Welcome' },
+            'top_viewer_bonus': { icon: '🏆', label: 'Top Viewer' },
+            'level_bonus': { icon: '⭐', label: 'Level Bonus' },
+            'achievement': { icon: '🏅', label: 'Achievement' },
+            'referral_bonus': { icon: '👥', label: 'Referral' },
+            'exchange': { icon: '🔄', label: 'Exchange' },
+            'gift_sent': { icon: '🎁', label: 'Gift Sent' },
+            'gift_received': { icon: '🎁', label: 'Gift Received' }
+        };
+        container.innerHTML = transactions.map(item => {
+            const type = typeMap[item.type] || { icon: '📝', label: item.type };
+            const amount = item.amount || 0;
+            return `<div class="transaction-item">
+                <div class="left">
+                    <div class="type">${type.icon} ${type.label}</div>
+                    <div class="detail">${item.description || ''}</div>
+                    <div class="date">${item._date.toLocaleString()}</div>
+                </div>
+                <div class="right ${amount > 0 ? 'positive' : 'negative'}">${amount > 0 ? '+' : ''}${amount}</div>
+            </div>`;
+        }).join('');
+    } catch (e) { container.innerHTML = '<div class="table-loading">Failed</div>'; }
+}
+async function sendCoinGift() {
+    const receiverEmail = document.getElementById('giftReceiverEmail').value.trim();
+    const amount = parseInt(document.getElementById('giftAmount').value);
+    const msgEl = document.getElementById('giftMsg');
+    if (!receiverEmail || !amount || amount < 1) { msgEl.textContent = '❌ Fill'; msgEl.style.color = 'var(--rose-500)'; return; }
+    const totalCost = amount + GIFT_FEE;
+    if (userData.coins < totalCost) { msgEl.textContent = '❌ Need ' + totalCost; msgEl.style.color = 'var(--rose-500)'; return; }
+    try {
+        const snapshot = await db.collection('users').where('email', '==', receiverEmail).get();
+        if (snapshot.empty) { msgEl.textContent = '❌ Not found'; msgEl.style.color = 'var(--rose-500)'; return; }
+        const receiverDoc = snapshot.docs[0];
+        const transferResult = await db.runTransaction(async (tx) => {
+            const sRef = db.collection('users').doc(currentUser.uid);
+            const rRef = db.collection('users').doc(receiverDoc.id);
+            const sDoc = await tx.get(sRef);
+            const rDoc = await tx.get(rRef);
+            const senderCoins = Math.max(0, Number(sDoc.data()?.coins) || 0);
+            const receiverCoins = Math.max(0, Number(rDoc.data()?.coins) || 0);
+            if (senderCoins < totalCost) throw new Error('INSUFFICIENT_COINS');
+            const newSenderCoins = senderCoins - totalCost;
+            tx.update(sRef, { coins: newSenderCoins });
+            tx.update(rRef, { coins: receiverCoins + amount });
+            return newSenderCoins;
+        });
+        userData.coins = transferResult;
+        saveCoinsToLocal(transferResult);
+        updateUI();
+        msgEl.textContent = '✅ Sent';
+        msgEl.style.color = 'var(--mint-600)';
+        showToast('🎁 Sent!', 'success');
+    } catch (e) {
+        msgEl.textContent = e.message === 'INSUFFICIENT_COINS' ? '❌ Insufficient Coins' : '❌ Failed';
+        msgEl.style.color = 'var(--rose-500)';
+    }
+}
+
+// ============================================================
+//  COIN DEBUG TEST
+// ============================================================
+console.log('🟢 CASH TUBE COIN DEBUG FILE LOADED', {
+    time: new Date().toISOString(),
+    page: window.location.href
+});
+// ============================================================
+// ============================================================
+//  INIT
+// ============================================================
+window.addEventListener('load', () => {
+    setTimeout(() => {
+        document.getElementById('splash').classList.add('hide');
+        setTimeout(() => { document.getElementById('splash').style.display = 'none'; }, 800);
+    }, 2200);
+});
+
+updateUI();
+renderAdCards();
+updateDailyBonusUI();
+applyLanguage();
+// ============================================================
+//  🎬 VIDEO TASKS — YouTube + RSS + Coin System
+// ============================================================
+
+const YOUTUBE_API_KEY = 'AIzaSyBmr5WXG46FsqDSSTax8Z9rlnlpQh4oyzI'; // 👈 သင့် key
+var VIDEO_REWARD = 0;
+const TARGET_WATCH = 120; // 2 minutes
+const RSS_CACHE_TIME = 30 * 60 * 1000;
+
+const RSS_CHANNELS = [
+    { id: 'UCNHIxx5X9XND2BMZ4LV73Fg', name: 'Heart & Soul', emoji: '🎬', category: 'movies' },
+    { id: 'UCZpd3IpUl7c7vLYIIiWzoOA', name: 'Drama Recap', emoji: '📺', category: 'drama' },
+    { id: 'UCgsfh9NxpBbzmfdV6wzgFA', name: 'Mg Kyaw AI', emoji: '🤖', category: 'ai' },
+    { id: 'UCaL6FKyJ75fAKANYL2P7t_g', name: 'Mahar Ent', emoji: '🎥', category: 'movies' },
+    { id: 'UC1ghHlhem7676hJfsyoON5Q', name: 'Barbie Myanmar', emoji: '💃', category: 'fun' },
+    { id: 'UCesiu2rvAlopyNVzEK4RFMA', name: 'SEIN HTAY', emoji: '🎞️', category: 'movies' },
+    { id: 'UCniPIti4QwaOEorvIqv1RWA', name: 'Anne Bryan', emoji: '🌸', category: 'fun' },
+    { id: 'UCj10WX_WHpZIpN6br_g-h1w', name: 'Pyone Play Sports', emoji: '⚽', category: 'sports' }
+];
+
+const CORS_PROXIES = [
+    'https://api.allorigins.win/raw?url=',
+    'https://corsproxy.io/?',
+    'https://api.codetabs.com/v1/proxy?quest='
+];
+
+let allRSSVideos = [];
+let currentVideoCategory = 'rss';
+let ytPlayer = null;
+let currentVideoId = "";
+let ytPlayerReady = false;
+let videoWatchTime = 0;
+let videoWatchInterval = null;
+let isVideoAdShowing = false;
+let isVideoPlaying = false;
+let savedVideoTime = 0;
+
+// --- YouTube Player Init ---
+function initYTPlayer() {
+    if (ytPlayer && ytPlayer.loadVideoById) return;
+    if (typeof YT !== 'undefined' && YT.Player) {
+        ytPlayer = new YT.Player('player', {
+            height: '100%', width: '100%', videoId: '',
+            playerVars: { playsinline: 1, rel: 0, modestbranding: 1, enablejsapi: 1 },
+            events: {
+                onReady: () => {
+                    ytPlayerReady = true;
+                    const err = document.getElementById('videoError');
+                    if (err) err.style.display = 'none';
+                    resetVideoWatchTimer();
+                },
+                onStateChange: onYTPlayerStateChange,
+                onError: () => {
+                    const err = document.getElementById('videoError');
+                    if (err) err.style.display = 'block';
+                    resetVideoWatchTimer();
+                }
+            }
+        });
+    } else setTimeout(initYTPlayer, 500);
+}
+window.onYouTubeIframeAPIReady = function() { initYTPlayer(); };
+
+// --- YouTube API Script Loader ---
+(function loadYTApi() {
+    if (window.YT && window.YT.Player) { initYTPlayer(); return; }
+    if (!document.querySelector('script[src*="youtube.com/iframe_api"]')) {
+        const s = document.createElement('script');
+        s.src = 'https://www.youtube.com/iframe_api';
+        document.head.appendChild(s);
+    }
+})();
+
+function onYTPlayerStateChange(event) {
+    if (event.data === YT.PlayerState.PLAYING) {
+        isVideoPlaying = true;
+        if (isVideoAdShowing) { isVideoAdShowing = false; resetVideoWatchTimer(); }
+        if (!isVideoAdShowing && videoWatchTime < TARGET_WATCH) startVideoWatchTimer();
+    } else if (event.data === YT.PlayerState.PAUSED) {
+        isVideoPlaying = false;
+        if (videoWatchInterval) { clearInterval(videoWatchInterval); videoWatchInterval = null; }
+    } else if (event.data === YT.PlayerState.ENDED) {
+        isVideoPlaying = false;
+        if (videoWatchInterval) { clearInterval(videoWatchInterval); videoWatchInterval = null; }
+    }
+}
+
+function loadVideo(id) {
+    if (!id || id.length !== 11) return;
+    currentVideoId = id;
+    resetVideoWatchTimer();
+    const err = document.getElementById('videoError');
+    if (err) err.style.display = 'none';
+    const popup = document.getElementById('videoClaimPopup');
+    if (popup) popup.style.display = 'none';
+    isVideoAdShowing = false;
+    isVideoPlaying = false;
+    savedVideoTime = 0;
+    if (!ytPlayer || !ytPlayerReady) { initYTPlayer(); setTimeout(() => loadVideo(id), 800); return; }
+    if (ytPlayer.loadVideoById) {
+        ytPlayer.loadVideoById(id);
+        setTimeout(() => { if (ytPlayer.playVideo) ytPlayer.playVideo(); }, 800);
+    }
+    document.getElementById('videosSection').scrollIntoView({ behavior: 'smooth' });
+}
+
+// --- Watch Timer (2 min) ---
+function resetVideoWatchTimer() {
+    if (videoWatchInterval) { clearInterval(videoWatchInterval); videoWatchInterval = null; }
+    videoWatchTime = 0;
+    isVideoAdShowing = false;
+    isVideoPlaying = false;
+    const wt = document.getElementById('watchTimer');
+    const cp = document.getElementById('videoClaimPopup');
+    if (wt) wt.style.display = 'none';
+    if (cp) cp.style.display = 'none';
+    const wtt = document.getElementById('watchTimerText');
+    if (wtt) wtt.textContent = '0s / 120s';
+}
+function startVideoWatchTimer() {
+    if (videoWatchInterval) { clearInterval(videoWatchInterval); videoWatchInterval = null; }
+    if (isVideoAdShowing || videoWatchTime >= TARGET_WATCH) { if (videoWatchTime >= TARGET_WATCH) showVideoClaimPopup(); return; }
+    isVideoPlaying = true;
+    const wt = document.getElementById('watchTimer');
+    if (wt) wt.style.display = 'block';
+    updateVideoTimerDisplay();
+    videoWatchInterval = setInterval(() => {
+        if (isVideoAdShowing || !isVideoPlaying) return;
+        videoWatchTime++;
+        updateVideoTimerDisplay();
+        if (videoWatchTime >= TARGET_WATCH) {
+            clearInterval(videoWatchInterval);
+            videoWatchInterval = null;
+            if (ytPlayer && ytPlayer.pauseVideo) ytPlayer.pauseVideo();
+            isVideoPlaying = false;
+            showVideoClaimPopup();
+        }
+    }, 1000);
+}
+function updateVideoTimerDisplay() {
+    const el = document.getElementById('watchTimerText');
+    if (el) el.textContent = `${videoWatchTime}s / ${TARGET_WATCH}s`;
+}
+function showVideoClaimPopup() {
+    isVideoAdShowing = true;
+    isVideoPlaying = false;
+    if (videoWatchInterval) { clearInterval(videoWatchInterval); videoWatchInterval = null; }
+    const amtEl = document.getElementById('videoClaimAmount');
+    if (amtEl) amtEl.textContent = VIDEO_REWARD;
+    const popup = document.getElementById('videoClaimPopup');
+    if (popup) popup.style.display = 'block';
+    const wt = document.getElementById('watchTimer');
+    if (wt) wt.style.display = 'none';
+    if (navigator.vibrate) navigator.vibrate(100);
+}
+
+// --- Claim → Ad Page → Coin ---
+function claimVideoCoin() {
+    if (isAccountRestricted()) { showRestrictedNotice(); return; }
+    if (isUpdatingCoins) { showToast('⏳ Please wait...', 'warning'); return; }
+    if (!currentUser) { showToast('❌ Please login', 'error'); return; }
+    if (!adLinks || adLinks.length === 0) {
+        showToast('❌ No ad links configured', 'error');
+        const popup = document.getElementById('videoClaimPopup');
+        if (popup) popup.style.display = 'none';
+        isVideoAdShowing = false;
+        resetVideoWatchTimer();
+        if (ytPlayer && ytPlayer.playVideo) setTimeout(() => ytPlayer.playVideo(), 500);
+        return;
+    }
+    if (ytPlayer && typeof ytPlayer.getCurrentTime === 'function') {
+        try { savedVideoTime = ytPlayer.getCurrentTime(); } catch (e) { savedVideoTime = 0; }
+    }
+    if (ytPlayer && typeof ytPlayer.pauseVideo === 'function') {
+        try { ytPlayer.pauseVideo(); } catch (e) {}
+    }
+    const popup = document.getElementById('videoClaimPopup');
+    if (popup) popup.style.display = 'none';
+    const adUrl = adLinks[Math.floor(Math.random() * adLinks.length)];
+    try {
+        const p = window.open(adUrl, 'videoAdTab', 'width=500,height=700,scrollbars=yes,resizable=yes');
+        if (p) p.focus();
+        else showToast('⚠️ Popup blocked', 'warning');
+    } catch (e) {}
+    startVideoAdPage(VIDEO_REWARD);
+}
+
+function startVideoAdPage(reward) {
+    isVideoAdShowing = true;
+    const adPage = document.getElementById('adPage');
+    const mainContainer = document.getElementById('appContainer');
+    if (mainContainer) mainContainer.style.display = 'none';
+    if (adPage) adPage.classList.add('show');
+    const progressBar = document.getElementById('adPageProgress');
+    const timerEl = document.getElementById('adPageTimer');
+    const claimBtn = document.getElementById('adPageClaimBtn');
+    const loading = document.getElementById('adPageLoading');
+    if (loading) { loading.style.display = 'flex'; loading.innerHTML = '<i class="fas fa-spinner fa-spin"></i><p>Ad Loading...</p>'; }
+    if (progressBar) progressBar.style.width = '0%';
+    if (timerEl) timerEl.textContent = AD_DURATION;
+    if (claimBtn) {
+        claimBtn.disabled = true;
+        claimBtn.className = 'ad-page-claim-btn';
+        claimBtn.innerHTML = `⏳ ${AD_DURATION}s ပြည့်လျှင် Ad Count တိုးမည်...`;
+        claimBtn.onclick = null;
+    }
+    let isClaimed = false;
+    const startTime = Date.now();
+    if (adPageInterval) clearInterval(adPageInterval);
+    adPageInterval = setInterval(() => {
+        const elapsed = Math.floor((Date.now() - startTime) / 1000);
+        const timeLeft = Math.max(AD_DURATION - elapsed, 0);
+        const progressPercent = Math.min((elapsed / AD_DURATION) * 100, 100);
+        if (progressBar) progressBar.style.width = progressPercent + '%';
+        if (timerEl) timerEl.textContent = timeLeft;
+        if (timeLeft <= 0) {
+            clearInterval(adPageInterval);
+            adPageInterval = null;
+            if (progressBar) progressBar.style.width = '100%';
+            if (claimBtn) {
+                claimBtn.disabled = false;
+                claimBtn.className = 'ad-page-claim-btn active';
+                claimBtn.innerHTML = `✅ Complete Ad`;
+                claimBtn.onclick = function () {
+                    if (isClaimed) return;
+                    isClaimed = true;
+                    claimBtn.disabled = true;
+                    claimBtn.innerHTML = '⏳ Adding...';
+                    giveVideoReward(reward);
+                };
+            }
+            setTimeout(() => { if (!isClaimed) { isClaimed = true; giveVideoReward(reward); } }, 2000);
+        }
+    }, 250);
+}
+
+async function giveVideoReward(reward) {
+    if (isAccountRestricted()) { closeVideoAdPage(); showRestrictedNotice(); return; }
+    if (!currentUser) { showToast('❌ Please login', 'error'); return; }
+    if (dailyAdsToday >= DAILY_AD_TARGET) {
+        closeVideoAdPage();
+        showToast('Daily Ads Limit ပြည့်ပါပြီ', 'warning');
+        return;
+    }
+    if (!acquireCoinLock()) { showToast('⏳ Please wait...', 'warning'); return; }
+    try {
+        const newAds = (userData.totalAds || 0) + 1;
+        userData.totalAds = newAds;
+        dailyAdsToday += 1;
+        updateUI();
+        updateLevelUI();
+        updateAchievementsUI();
+        const pending = getPendingAdRewards();
+        pending.count += 1;
+        pending.coins += 0;
+        pending.lastTitle = 'Video Watch';
+        setPendingAdRewards(pending);
+        const flushed = await flushPendingAdRewards(false);
+        closeVideoAdPage();
+        updateDailyAdsProgressUI();
+        showToast(`✅ Ads ${dailyAdsToday}/${DAILY_AD_TARGET} မှတ်တမ်းတင်ပြီးပါပြီ`, 'success');
+        if (flushed) loadDashboard();
+    } catch (error) {
+        showToast('❌ Failed', 'error');
+        closeVideoAdPage();
+    } finally {
+        setTimeout(() => releaseCoinLock(), 1500);
+    }
+}
+
+function closeVideoAdPage() {
+    if (adPageInterval) { clearInterval(adPageInterval); adPageInterval = null; }
+    const adPage = document.getElementById('adPage');
+    if (adPage) adPage.classList.remove('show');
+    const mainContainer = document.getElementById('appContainer');
+    if (mainContainer) mainContainer.style.display = 'flex';
+    isVideoAdShowing = false;
+    const progressBar = document.getElementById('adPageProgress');
+    if (progressBar) progressBar.style.width = '0%';
+    const timerEl = document.getElementById('adPageTimer');
+    if (timerEl) timerEl.textContent = AD_DURATION;
+    setTimeout(() => resumeVideoAfterAd(), 4200);
+}
+
+function resumeVideoAfterAd() {
+    isVideoAdShowing = false;
+    if (!ytPlayer || !ytPlayerReady) {
+        initYTPlayer();
+        setTimeout(() => {
+            if (ytPlayer && ytPlayer.loadVideoById && currentVideoId) {
+                ytPlayer.loadVideoById(currentVideoId);
+                setTimeout(() => { if (ytPlayer.playVideo) ytPlayer.playVideo(); resetVideoWatchTimer(); }, 500);
+            }
+        }, 1000);
+        return;
+    }
+    try {
+        if (savedVideoTime > 0 && ytPlayer.seekTo) {
+            ytPlayer.seekTo(savedVideoTime, true);
+            setTimeout(() => { if (ytPlayer.playVideo) ytPlayer.playVideo(); resetVideoWatchTimer(); }, 500);
+        } else if (currentVideoId && ytPlayer.loadVideoById) {
+            ytPlayer.loadVideoById(currentVideoId);
+            setTimeout(() => { if (ytPlayer.playVideo) ytPlayer.playVideo(); resetVideoWatchTimer(); }, 800);
+        } else if (ytPlayer.playVideo) {
+            ytPlayer.playVideo();
+            resetVideoWatchTimer();
+        }
+    } catch (e) {}
+}
+
+// --- YouTube Search ---
+async function searchYouTube() {
+    const query = document.getElementById('videoSearchInput').value.trim();
+    if (!query) { showToast('Enter search term', 'error'); return; }
+    let videoId = '';
+    if (query.includes('youtu.be/')) videoId = query.split('youtu.be/')[1].split('?')[0];
+    else if (query.includes('watch?v=')) videoId = query.split('watch?v=').pop().split('&')[0];
+    else if (query.includes('shorts/')) videoId = query.split('shorts/')[1].split('?')[0];
+    else if (query.length === 11 && /^[a-zA-Z0-9_-]+$/.test(query)) videoId = query;
+    if (videoId && videoId.length === 11) { loadVideo(videoId); document.getElementById('videoSearchInput').value = ''; return; }
+
+    const container = document.getElementById('videoGrid');
+    const title = document.getElementById('videoListTitle');
+    const count = document.getElementById('videoListCount');
+    title.textContent = '🔍 Searching...';
+    count.textContent = '...';
+    container.innerHTML = `<div class="video-loading"><i class="fas fa-spinner"></i><p>Searching "${query}"...</p></div>`;
+    try {
+        const response = await fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=20&q=${encodeURIComponent(query)}&type=video&key=${YOUTUBE_API_KEY}`);
+        if (!response.ok) throw new Error('API error');
+        const data = await response.json();
+        if (data.items && data.items.length > 0) {
+            const results = data.items.map(item => ({
+                name: item.snippet.title, id: item.id.videoId,
+                thumbnail: item.snippet.thumbnails.medium.url,
+                channelName: item.snippet.channelTitle, channelEmoji: '🔍',
+                published: item.snippet.publishedAt, views: 0
+            }));
+            title.textContent = `🔍 Results (${results.length})`;
+            count.textContent = results.length;
+            container.innerHTML = '';
+            results.forEach((item, i) => container.appendChild(createVideoCard(item, i)));
+        } else {
+            container.innerHTML = `<div class="video-no-results"><i class="fas fa-search"></i><p>No results</p></div>`;
+            count.textContent = '0';
+        }
+    } catch (error) {
+        container.innerHTML = `<div class="video-no-results"><i class="fas fa-exclamation-circle"></i><p>Search failed</p></div>`;
+        count.textContent = '0';
+    }
+}
+
+// --- RSS Fetch ---
+async function fetchChannelRSS(channelId) {
+    const cacheKey = `rss_cache_${channelId}`;
+    let cached = null;
+    try {
+        const c = localStorage.getItem(cacheKey);
+        if (c) { cached = JSON.parse(c); if (Date.now() - cached.timestamp < RSS_CACHE_TIME) return cached.data; }
+    } catch (e) {}
+    const rssUrl = `https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`;
+    for (const proxy of CORS_PROXIES) {
+        try {
+            const response = await fetch(proxy + encodeURIComponent(rssUrl));
+            if (!response.ok) continue;
+            const xmlText = await response.text();
+            if (!xmlText.includes('<entry>')) continue;
+            const parser = new DOMParser();
+            const xmlDoc = parser.parseFromString(xmlText, 'text/xml');
+            const entries = xmlDoc.querySelectorAll('entry');
+            const videos = [];
+            entries.forEach(entry => {
+                const videoId = entry.getElementsByTagName('yt:videoId')[0]?.textContent;
+                const title = entry.getElementsByTagName('title')[0]?.textContent;
+                const published = entry.getElementsByTagName('published')[0]?.textContent;
+                const thumbnail = entry.getElementsByTagName('media:thumbnail')[0]?.getAttribute('url');
+                const stats = entry.getElementsByTagName('media:statistics')[0];
+                const views = stats ? parseInt(stats.getAttribute('views')) : 0;
+                if (videoId && title) videos.push({
+                    id: videoId, name: title, published, views,
+                    thumbnail: thumbnail || `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`
+                });
+            });
+            if (videos.length > 0) {
+                try { localStorage.setItem(cacheKey, JSON.stringify({ data: videos, timestamp: Date.now() })); } catch (e) {}
+                return videos;
+            }
+        } catch (error) { continue; }
+    }
+    if (cached) return cached.data;
+    return [];
+}
+
+async function loadRSSVideos() {
+    const container = document.getElementById('videoGrid');
+    const title = document.getElementById('videoListTitle');
+    const count = document.getElementById('videoListCount');
+    container.innerHTML = `<div class="video-loading"><i class="fas fa-satellite-dish"></i><p>Channel ၈ ခုကနေ Video တွေ ရယူနေပါသည်...</p></div>`;
+    title.textContent = '🎬 Movies';
+    count.textContent = '...';
+    try {
+        const results = await Promise.all(RSS_CHANNELS.map(channel => fetchChannelRSS(channel.id)));
+        const allVideos = [];
+        results.forEach((videos, i) => {
+            const channel = RSS_CHANNELS[i];
+            videos.forEach(v => allVideos.push({
+                ...v, channelId: channel.id, channelName: channel.name,
+                channelEmoji: channel.emoji, channelCategory: channel.category
+            }));
+        });
+        allRSSVideos = allVideos.sort((a, b) => new Date(b.published) - new Date(a.published));
+        renderFilteredVideos(allRSSVideos);
+    } catch (error) {
+        container.innerHTML = `<div class="video-no-results"><i class="fas fa-exclamation-circle"></i><p>Video တွေ ရယူမရပါ</p></div>`;
+    }
+}
+
+// --- Series Detection ---
+function myanmarToNumber(str) {
+    if (!str) return 0;
+    const map = { '၀':0,'၁':1,'၂':2,'၃':3,'၄':4,'၅':5,'၆':6,'၇':7,'၈':8,'၉':9 };
+    let num = '';
+    for (const ch of str) num += map[ch] !== undefined ? map[ch] : ch;
+    return parseInt(num) || 0;
+}
+function detectSeries(videos) {
+    const patterns = [
+        /\(အပိုင်း\s*([၁၂၃၄၅၆၇၈၉၀\d]+)\)/i,
+        /အပိုင်း\s*([၁၂၃၄၅၆၇၈၉၀\d]+)/i,
+        /(part|episode|ep)\s*([\d၁၂၃၄၅၆၇၈၉၀]+)/i,
+        /\(([၁၂၃၄၅၆၇၈၉၀\d])\)/
+    ];
+    const seriesMap = {};
+    const standalone = [];
+    videos.forEach(video => {
+        let matched = false, baseTitle = '', episodeNum = '';
+        for (const pattern of patterns) {
+            const match = video.name.match(pattern);
+            if (match) {
+                episodeNum = match[1] || match[2];
+                baseTitle = video.name.replace(/\(အပိုင်း\s*[၁၂၃၄၅၆၇၈၉၀\d]+\)/gi,'')
+                    .replace(/အပိုင်း\s*[၁၂၃၄၅၆၇၈၉၀\d]+/gi,'')
+                    .replace(/[\s\-–—_]+$/,'').trim();
+                matched = true; break;
+            }
+        }
+        if (matched && baseTitle.length > 5) {
+            const key = baseTitle.toLowerCase().substring(0, 40);
+            if (!seriesMap[key]) seriesMap[key] = { baseTitle, videos: [] };
+            seriesMap[key].videos.push({ ...video, episodeNum });
+        } else standalone.push(video);
+    });
+    const series = [];
+    const remainingStandalone = [...standalone];
+    Object.values(seriesMap).forEach(s => {
+        if (s.videos.length >= 2) {
+            s.videos.sort((a, b) => myanmarToNumber(a.episodeNum) - myanmarToNumber(b.episodeNum));
+            series.push(s);
+        } else s.videos.forEach(v => remainingStandalone.push(v));
+    });
+    return { series, standalone: remainingStandalone };
+}
+
+function renderFilteredVideos(videos) {
+    const container = document.getElementById('videoGrid');
+    const title = document.getElementById('videoListTitle');
+    const count = document.getElementById('videoListCount');
+    count.textContent = videos.length;
+    title.textContent = `🎬 Movies (${videos.length})`;
+    if (videos.length === 0) {
+        container.innerHTML = `<div class="video-no-results"><i class="fas fa-search"></i><p>Video မတွေ့ပါ</p></div>`;
+        return;
+    }
+    const { series, standalone } = detectSeries(videos);
+    container.innerHTML = '';
+    series.forEach(s => {
+        const group = document.createElement('div');
+        group.className = 'series-group';
+        let episodesHtml = '';
+        s.videos.forEach(video => {
+            const epNum = video.episodeNum || '?';
+            episodesHtml += `
+                <div class="series-episode" onclick="event.stopPropagation(); loadVideo('${video.id}')">
+                    <div class="ep-number">${epNum}</div>
+                    <img class="ep-thumb" src="${video.thumbnail}" loading="lazy" />
+                    <div class="ep-title">အပိုင်း ${epNum}</div>
+                </div>`;
+        });
+        const firstVideo = s.videos[0];
+        group.innerHTML = `
+            <div class="series-header">
+                <div class="series-title-wrap">
+                    <span class="series-icon">🎬</span>
+                    <div class="series-info">
+                        <div class="series-name">${s.baseTitle}</div>
+                        <div class="series-meta">
+                            <span>${firstVideo.channelEmoji} ${firstVideo.channelName}</span>
+                            <span class="series-episodes-count">${s.videos.length} parts</span>
+                        </div>
+                    </div>
+                </div>
+                <button class="series-play-all-btn" onclick="event.stopPropagation(); loadVideo('${firstVideo.id}')">
+                    <i class="fas fa-play"></i> Play All
+                </button>
+            </div>
+            <div class="series-episodes">${episodesHtml}</div>`;
+        container.appendChild(group);
+    });
+    standalone.forEach((item, index) => container.appendChild(createVideoCard(item, index)));
+}
+
+function createVideoCard(item, index) {
+    const card = document.createElement('div');
+    card.className = 'v-card';
+    const pubDate = new Date(item.published);
+    const daysAgo = Math.floor((Date.now() - pubDate) / (1000 * 60 * 60 * 24));
+    let timeAgo = daysAgo === 0 ? 'Today' : daysAgo === 1 ? 'Yesterday' :
+        daysAgo < 7 ? daysAgo + 'd ago' : daysAgo < 30 ? Math.floor(daysAgo/7) + 'w ago' :
+        daysAgo < 365 ? Math.floor(daysAgo/30) + 'mo ago' : Math.floor(daysAgo/365) + 'y ago';
+    card.innerHTML = `
+        <div class="v-thumb">
+            <img src="${item.thumbnail}" loading="lazy" />
+            <div class="play-overlay"><div class="play-icon"><i class="fas fa-play"></i></div></div>
+            <div class="time-ago">${timeAgo}</div>
+        </div>
+        <div class="v-title">${item.name}</div>
+        <div class="v-channel">${item.channelEmoji || '📁'} ${item.channelName || 'Local'}</div>`;
+    card.onclick = () => loadVideo(item.id);
+    return card;
+}
+
+// --- Category Switch ---
+const defaultSongList = [
+    { name: "သီချင်း 1 - တို့ဗမာ", id: "EnpWs20HZiY" },
+    { name: "သီချင်း 2 - ရင်ခုန်သံ", id: "H0GOhtVdC3Y" }
+];
+const defaultVideoList = [{ name: "ဗီဒီယို 1", id: "I54Chzm_YUY" }];
+const defaultCartoonList = [{ name: "ကာတွန်း 1", id: "EnpWs20HZiY" }];
+
+function getVideosFromLocal(category) {
+    const stored = localStorage.getItem('videos_' + category);
+    if (stored) { try { return JSON.parse(stored); } catch (e) {} }
+    if (category === 'song') return defaultSongList;
+    if (category === 'video') return defaultVideoList;
+    if (category === 'cartoon') return defaultCartoonList;
+    return [];
+}
+
+function switchVideoCategory(category, el) {
+    currentVideoCategory = category;
+    document.querySelectorAll('.video-pill').forEach(e => e.classList.remove('active'));
+    if (el) el.classList.add('active');
+    resetVideoWatchTimer();
+    isVideoAdShowing = false;
+    isVideoPlaying = false;
+    if (category === 'rss') loadRSSVideos();
+    else if (category === 'search') {
+        const container = document.getElementById('videoGrid');
+        document.getElementById('videoListTitle').textContent = '🔍 Search';
+        document.getElementById('videoListCount').textContent = '0';
+        container.innerHTML = `<div class="video-no-results"><i class="fas fa-search"></i><p>အပေါ်မှာ ရှာပါ</p></div>`;
+    } else renderLocalVideos(category);
+}
+
+function renderLocalVideos(category) {
+    const container = document.getElementById('videoGrid');
+    const title = document.getElementById('videoListTitle');
+    const count = document.getElementById('videoListCount');
+    container.innerHTML = '';
+    let list = getVideosFromLocal(category);
+    title.textContent = category === 'myvideo' ? '📽️ My Videos' :
+                        category === 'song' ? '🎵 Songs' :
+                        category === 'video' ? '🎬 Videos' : '🎨 Cartoons';
+    if (!list || list.length === 0) {
+        container.innerHTML = `<div class="video-no-results"><i class="fas fa-video-slash"></i><p>Video မရှိသေးပါ</p></div>`;
+        count.textContent = '0';
+        return;
+    }
+    count.textContent = list.length;
+    list.forEach((item, index) => {
+        const card = document.createElement('div');
+        card.className = 'v-card';
+        card.innerHTML = `
+            <div class="v-thumb">
+                <img src="https://img.youtube.com/vi/${item.id}/hqdefault.jpg" loading="lazy" />
+                <div class="play-overlay"><div class="play-icon"><i class="fas fa-play"></i></div></div>
+            </div>
+            <div class="v-title">${item.name}</div>
+            <div class="v-channel">📁 Local</div>`;
+        card.onclick = () => { if (item.id && item.id.length === 11) loadVideo(item.id); };
+        container.appendChild(card);
+    });
+}
+
+// --- Init ---
+if (document.readyState === 'complete' || document.readyState === 'interactive') {
+    initYTPlayer();
+}
+// Lazy load RSS videos when user scrolls to videos section
+const _videoSectionObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+        if (entry.isIntersecting && allRSSVideos.length === 0 && currentVideoCategory === 'rss') {
+            loadRSSVideos();
+            _videoSectionObserver.disconnect();
+        }
+    });
+}, { threshold: 0.1 });
+setTimeout(() => {
+    const vs = document.getElementById('videosSection');
+    if (vs) _videoSectionObserver.observe(vs);
+}, 1000);
+// ============================================================
+//  🌈 DIGITAL MARKET PAGE — FULL LOGIC
+// ============================================================
+(function(){
+    const P = [
+        { s:'BTC',  b:68000, v:0.8 },
+        { s:'ETH',  b:3500,  v:1.0 },
+        { s:'COIN', b:0,     v:0.6, m:true },
+        { s:'MMK',  b:2100,  v:0.3 },
+        { s:'GOLD', b:2050,  v:0.5 },
+        { s:'USDT', b:1.00,  v:0.1 },
+        { s:'XAU',  b:68.5,  v:0.7 },
+        { s:'SILV', b:24.3,  v:0.9 }
+    ];
+    const C = ['#ff1744','#ff9100','#ffea00','#00e676',
+               '#22d3ee','#a855f7','#f472b6','#00e5ff'];
+
+    let state = {}, prev = {}, tickT = null, waveT = null;
+    let booted = false, opened = false;
+
+    // ---- Base rate (MMK per 1 coin) ----
+    function baseRate(){
+        const direct = (typeof coinMmkRate !== 'undefined' && coinMmkRate > 0) ? coinMmkRate : 0;
+        return direct > 0 ? direct / 10000 : 0;
+    }
+
+    // ---- Color coding ----
+    function colorClass(price, all, pr){
+        const mx = Math.max(...all), mn = Math.min(...all);
+        const r = (mx - mn) || 1;
+        const pos = (price - mn) / r;
+        if (pos >= 0.92) return 'hi';
+        if (pos <= 0.08) return 'lo';
+        if (pos >= 0.4 && pos <= 0.6) return 'mid';
+        if (pr !== undefined){
+            if (price > pr) return 'u';
+            if (price < pr) return 'd';
+        }
+        return 'mid';
+    }
+
+    // ---- Ticker item ----
+    function tickItem(p, price, pr){
+        const d = pr !== undefined ? price - pr : 0;
+        const pc = pr ? (d/pr)*100 : 0;
+        const all = Object.values(state).filter(v => typeof v === 'number');
+        const cc = colorClass(price, all.length ? all : [price], pr);
+
+        let ar = '■', tc = 'm';
+        if (d > 0){ ar='▲'; tc='u'; }
+        else if (d < 0){ ar='▼'; tc='d'; }
+        else if (cc === 'hi'){ ar='🔥'; tc='h'; }
+        else if (cc === 'lo'){ ar='❄'; tc='l'; }
+
+        const dp = price < 10 ? 4 : 2;
+        const sg = pc >= 0 ? '+' : '';
+        return `<span class="dmx-ti">` +
+               `<span class="s">${p.s}</span>` +
+               `<span class="${tc}"> ${ar} $${price.toFixed(dp)}</span>` +
+               `<span class="${pc>=0?'u':'d'}"> (${sg}${pc.toFixed(2)}%)</span>` +
+               `</span>`;
+    }
+
+    // ---- Render ticker ----
+    function updTick(){
+        const el = document.getElementById('dmxTrk');
+        if (!el) return;
+        let h = '';
+        P.forEach(p => {
+            const v = state[p.s];
+            if (typeof v === 'number') h += tickItem(p, v, prev[p.s]);
+        });
+        el.innerHTML = h + h;
+    }
+
+    // ---- Render price board ----
+    function updBoard(){
+        const el = document.getElementById('dmxBrd');
+        if (!el) return;
+        const all = Object.values(state).filter(v => typeof v === 'number');
+        let h = '';
+        P.forEach(p => {
+            const v = state[p.s];
+            if (typeof v !== 'number') return;
+            const pr = prev[p.s];
+            const d = pr !== undefined ? v - pr : 0;
+            const pc = pr ? (d/pr)*100 : 0;
+            const cc = colorClass(v, all, pr);
+            const dp = v < 10 ? 4 : 2;
+            const ar = d > 0 ? '▲' : d < 0 ? '▼' : '■';
+            h += `<div class="dmx-cl" id="dmxC-${p.s}">` +
+                 `<div>` +
+                 `<div class="dmx-pr">${p.s}${p.m ? ' ⭐' : ''}</div>` +
+                 `<div class="dmx-pc ${d>=0?'u':'d'}">${ar} ${pc>=0?'+':''}${pc.toFixed(2)}%</div>` +
+                 `</div>` +
+                 `<div class="dmx-pv ${cc}">$${v.toFixed(dp)}</div>` +
+                 `</div>`;
+        });
+        el.innerHTML = h;
+
+        // Flash effect
+        P.forEach(p => {
+            const v = state[p.s], pr = prev[p.s];
+            if (typeof v !== 'number' || pr === undefined) return;
+            const c = document.getElementById('dmxC-' + p.s);
+            if (!c) return;
+            if (v > pr){
+                c.classList.remove('dmx-fd'); void c.offsetWidth; c.classList.add('dmx-fu');
+            } else if (v < pr){
+                c.classList.remove('dmx-fu'); void c.offsetWidth; c.classList.add('dmx-fd');
+            }
+        });
+    }
+
+    // ---- Render wave bars ----
+    function updWave(){
+        const el = document.getElementById('dmxWb');
+        if (!el) return;
+        let h = '';
+        for (let i = 0; i < 26; i++){
+            const ht = 6 + Math.random() * 26;
+            const c = C[i % C.length];
+            h += `<div class="dmx-bar" style="height:${ht}px;background:${c};box-shadow:0 0 6px ${c};"></div>`;
+        }
+        el.innerHTML = h;
+    }
+
+    // ---- Render exact price ----
+    function updXp(){
+        const el = document.getElementById('dmxXp');
+        const rl = document.getElementById('dmxPageRate');
+        if (!el) return;
+        const b = baseRate();
+        const f = (Math.random() * 0.6 - 0.3);
+        const d = b * (1 + f/100);
+
+        let col = '#fbbf24', ar = '■';
+        if (f > 0.05){ col = '#00e676'; ar = '▲'; }
+        else if (f < -0.05){ col = '#ff1744'; ar = '▼'; }
+
+        el.innerHTML = `Current: <span style="color:${col}">${d.toFixed(4)} MMK</span> / 1 Coin <span style="color:${col}">${ar} ${f>=0?'+':''}${f.toFixed(2)}%</span>`;
+        if (rl) rl.textContent = `10,000 C = ${typeof coinMmkRate !== 'undefined' && coinMmkRate > 0 ? coinMmkRate.toLocaleString() : '---'} MMK`;
+    }
+
+    // ---- Boot ----
+    function boot(){
+        if (booted) return;
+        booted = true;
+
+        // Seed prices
+        P.forEach(p => {
+            state[p.s] = p.m
+                ? Math.max(baseRate(), 0.0001)
+                : p.b * (0.98 + Math.random() * 0.04);
+            prev[p.s] = state[p.s];
+        });
+
+        updTick(); updBoard(); updWave(); updXp();
+
+        // Market tick every 2 sec
+        if (tickT) clearInterval(tickT);
+        tickT = setInterval(() => {
+            P.forEach(p => {
+                const old = state[p.s];
+                prev[p.s] = old;
+                let np;
+                if (p.m){
+                    const b = baseRate();
+                    np = b * (1 + (Math.random() * 0.8 - 0.4) / 100);
+                } else {
+                    np = old * (1 + (Math.random() * p.v * 2 - p.v) / 100);
+                }
+                state[p.s] = np;
+            });
+            updTick(); updBoard(); updXp();
+        }, 2000);
+
+        // Wave bars every 400ms
+        if (waveT) clearInterval(waveT);
+        waveT = setInterval(updWave, 400);
+    }
+
+    // ---- Open page ----
+    window.openDmxPage = function(){
+        const page = document.getElementById('dmxPage');
+        if (!page) return;
+        page.classList.add('show');
+        page.scrollTop = 0;
+        document.body.style.overflow = 'hidden';
+        opened = true;
+        if (!booted) boot();
+        updXp();
+    };
+
+    // ---- Close page ----
+    window.closeDmxPage = function(){
+        const page = document.getElementById('dmxPage');
+        if (!page) return;
+        page.classList.remove('show');
+        document.body.style.overflow = '';
+        opened = false;
+    };
+
+    // ---- Calculator ----
+    window.dmxCalc = function(){
+        const inp = document.getElementById('dmxIn');
+        const out = document.getElementById('dmxOut');
+        if (!inp || !out) return;
+        const v = parseInt(inp.value) || 0;
+        out.textContent = (v * baseRate()).toFixed(2);
+    };
+
+    // ---- Execute exchange ----
+    window.dmxGo = async function(){
+        const inp = document.getElementById('dmxIn');
+        if (!inp) return;
+        const v = parseInt(inp.value) || 0;
+        if (v <= 0){
+            if (typeof showToast === 'function') showToast('❌ Enter Coins', 'error');
+            return;
+        }
+        const rate = baseRate();
+        if (!rate || rate <= 0){
+            if (typeof showToast === 'function') showToast('❌ MMK Rate မသတ်မှတ်ရသေးပါ', 'error');
+            return;
+        }
+        if (!currentUser || typeof db === 'undefined'){
+            if (typeof showToast === 'function') showToast('❌ Please login', 'error');
+            return;
+        }
+
+        const userRef = db.collection('users').doc(currentUser.uid);
+        try {
+            const result = await db.runTransaction(async (tx) => {
+                const snap = await tx.get(userRef);
+                if (!snap.exists) throw new Error('USER_NOT_FOUND');
+                const d = snap.data() || {};
+                const coins = Math.max(0, Number(d.coins) || 0);
+                const mmk = Math.max(0, Number(d.mmkBalance) || 0);
+                if (coins < v) throw new Error('INSUFFICIENT_COINS');
+                const amount = v * rate;
+                tx.update(userRef, {
+                    coins: coins - v,
+                    mmkBalance: mmk + amount
+                });
+                return { coins: coins - v, mmkBalance: mmk + amount, amount };
+            });
+
+            userData.coins = result.coins;
+            userData.mmkBalance = result.mmkBalance;
+            if (typeof saveCoinsToLocal === 'function') saveCoinsToLocal(userData.coins);
+            if (typeof updateUI === 'function') updateUI();
+
+            db.collection('transactions').add({
+                userId: currentUser.uid,
+                type: 'digital_market_exchange',
+                amount: -v,
+                mmkAmount: result.amount,
+                description: `${v} Coins → ${result.amount.toFixed(2)} MMK`,
+                timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            }).catch(()=>{});
+
+            inp.value = '';
+            const out = document.getElementById('dmxOut');
+            if (out) out.textContent = '0.00';
+            if (typeof showToast === 'function') showToast(`✅ ${result.amount.toFixed(2)} MMK`, 'success');
+        } catch(e) {
+            if (typeof showToast === 'function') {
+                showToast(e.message === 'INSUFFICIENT_COINS' ? '❌ Insufficient Coins' : '❌ Exchange failed', 'error');
+            }
+        }
+    };
+
+    // ---- ESC key close ----
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && opened) window.closeDmxPage();
+    });
+
+    console.log('✅ Digital Market page loaded');
+})();
+
+
+
+
+function getYangonDateKey(){
+    return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Yangon'}).format(new Date());
+}
+function applyProfileFrame(frameId){
+    const wrap = document.getElementById('profileFrameWrap');
+    if (!wrap) return;
+    const frame = PROFILE_FRAMES.find(f=>f.id===frameId);
+    wrap.className = 'profile-frame-wrap ' + (frame ? frame.cls : 'frame-none');
+}
+function renderFrameShop(){
+    const box = document.getElementById('frameShop');
+    if (!box) return;
+    const owned = Array.isArray(userData.profileFrames) ? userData.profileFrames : [];
+    const equipped = userData.profileFrame || 'none';
+    box.innerHTML = PROFILE_FRAMES.map(f=>{
+        const isOwned = owned.includes(f.id);
+        const isEquipped = equipped === f.id;
+        return `<div class="frame-card ${isEquipped?'equipped':''}">
+            <div class="frame-preview">
+                <div class="profile-frame-wrap ${f.cls}">
+                    <img src="${document.getElementById('profileImg')?.src || 'https://ui-avatars.com/api/?name=User&background=3b82f6&color=fff&size=90'}" alt="">
+                </div>
+            </div>
+            <h5>${f.icon} ${f.name}</h5>
+            <small>${f.price} Coin</small>
+            <button onclick="${isOwned ? `equipProfileFrame('${f.id}')` : `buyProfileFrame('${f.id}')`}">
+                ${isEquipped ? '✓ အသုံးပြုနေသည်' : (isOwned ? 'အသုံးပြုမည်' : 'ဝယ်မည် · 300 C')}
+            </button>
+        </div>`;
+    }).join('');
+}
+async function buyProfileFrame(frameId){
+    if (!currentUser) {
+        showToast('❌ Please login','error');
+        return;
+    }
+
+    const frame = PROFILE_FRAMES.find(f => f.id === frameId);
+    if (!frame) return;
+
+    const owned = Array.isArray(userData.profileFrames)
+        ? userData.profileFrames
+        : [];
+
+    if (owned.includes(frameId)) {
+        await equipProfileFrame(frameId);
+        return;
+    }
+
+    const localCoins = Math.max(0, Number(userData.coins) || 0);
+
+    if (localCoins < frame.price) {
+        showToast('❌ Coin မလုံလောက်ပါ','error');
+        return;
+    }
+
+    if (!acquireCoinLock()) return;
+
+    try {
+        const ref = db.collection('users').doc(currentUser.uid);
+
+        /*
+         * 429 FIX
+         * Use a single Firestore update instead of runTransaction.
+         * The local coin check above prevents normal accidental purchases.
+         */
+        const newCoins = localCoins - frame.price;
+        const newOwned = owned.slice();
+        newOwned.push(frameId);
+
+        await ref.update({
+            coins: newCoins,
+            profileFrames: newOwned,
+            profileFrame: frameId
+        });
+
+        userData.coins = newCoins;
+        userData.profileFrames = newOwned;
+        userData.profileFrame = frameId;
+
+        saveCoinsToLocal(newCoins);
+        updateUI();
+        applyProfileFrame(frameId);
+        renderFrameShop();
+
+        /*
+         * Transaction record is optional.
+         * Keep it as a separate non-blocking write so a temporary
+         * Firestore limit does not make the frame purchase look failed.
+         */
+        db.collection('transactions').add({
+            userId: currentUser.uid,
+            type: 'profile_frame_purchase',
+            amount: -frame.price,
+            description: `Purchased ${frame.name} profile frame`,
+            timestamp: firebase.firestore.FieldValue.serverTimestamp()
+        }).catch(e => {
+            console.warn('Frame transaction log skipped:', e);
+        });
+
+        showToast(`✨ ${frame.name} Frame ဝယ်ပြီးပါပြီ`,'success');
+
+    } catch(e) {
+        console.error('❌ PROFILE FRAME PURCHASE FAILED:', e);
+        console.error('Frame ID:', frameId);
+        console.error('Firebase project:', firebaseConfig.projectId);
+        console.error('Current UID:', currentUser ? currentUser.uid : null);
+        console.error('Error code:', e && e.code);
+        console.error('Error message:', e && e.message);
+
+        showToast(
+            e && e.code === 'permission-denied'
+                ? '❌ Frame ဝယ်ခွင့် မရှိပါ'
+                : '❌ Frame ဝယ်ယူမှု မအောင်မြင်ပါ',
+            'error'
+        );
+    } finally {
+        releaseCoinLock();
+    }
+}
+
+async function equipProfileFrame(frameId){
+    if (!currentUser) return;
+    const owned = Array.isArray(userData.profileFrames) ? userData.profileFrames : [];
+    if (!owned.includes(frameId)) return;
+    try{
+        await db.collection('users').doc(currentUser.uid).update({profileFrame:frameId});
+        userData.profileFrame = frameId;
+        applyProfileFrame(frameId);
+        renderFrameShop();
+        showToast('💎 Profile Frame ပြောင်းပြီးပါပြီ','success');
+    }catch(e){ showToast('❌ Frame ပြောင်းမရပါ','error'); }
+}
+
+
+
+
+
+
+
+console.log('✅ Digital Market Exchange loaded');
+console.log('✅ Video Tasks loaded');
+console.log('✅ CASH TUBE Rewards - Orbit Neon UI Loaded');
+    
+
+function getReceiptDateKey(){
+    const d = new Date();
+    const parts = new Intl.DateTimeFormat('en-GB',{
+        timeZone:'Asia/Yangon',
+        year:'numeric',
+        month:'2-digit',
+        day:'2-digit'
+    }).formatToParts(d);
+
+    const get = k => parts.find(x=>x.type===k)?.value || '';
+    return get('year') + get('month') + get('day');
+}
+
+function receiptEscape(value){
+    return String(value ?? '').replace(/[&<>"']/g,function(c){
+        return {
+            '&':'&amp;',
+            '<':'&lt;',
+            '>':'&gt;',
+            '"':'&quot;',
+            "'":'&#039;'
+        }[c];
+    });
+}
+
+function receiptDate(value){
+    if(!value) return '-';
+
+    let d;
+    try{
+        if(typeof value.toDate === 'function') d = value.toDate();
+        else if(value.seconds) d = new Date(value.seconds * 1000);
+        else d = new Date(value);
+
+        return new Intl.DateTimeFormat('en-GB',{
+            timeZone:'Asia/Yangon',
+            year:'numeric',
+            month:'2-digit',
+            day:'2-digit',
+            hour:'2-digit',
+            minute:'2-digit',
+            hour12:true
+        }).format(d);
+    }catch(e){
+        return '-';
+    }
+}
+
+function showWithdrawalReceipt(data){
+    const overlay = document.getElementById('withdrawalReceiptOverlay');
+    const content = document.getElementById('withdrawalReceiptContent');
+
+    if(!overlay || !content) return;
+
+    const status = data.status || 'pending';
+
+    const statusText =
+        status === 'approved' ? '✅ Approved' :
+        status === 'rejected' ? '❌ Rejected' :
+        '⏳ Pending';
+
+    content.innerHTML = `
+        <div class="receipt-brand">
+            <div class="receipt-icon">🧾</div>
+            <div class="receipt-title">Cash Tube</div>
+            <div style="font-size:12px;opacity:.65;">Withdrawal Receipt</div>
+            <div class="receipt-number">
+                ${receiptEscape(data.receiptNo || '-')}
+            </div>
+        </div>
+
+        <div style="padding-top:5px;">
+            <div class="receipt-line">
+                <span>User</span>
+                <strong>${receiptEscape(data.username || 'User')}</strong>
+            </div>
+
+            <div class="receipt-line">
+                <span>Amount</span>
+                <strong>${Number(data.amount || 0).toLocaleString()} MMK</strong>
+            </div>
+
+            <div class="receipt-line">
+                <span>Payment</span>
+                <strong>${receiptEscape(data.method || '-')}</strong>
+            </div>
+
+            <div class="receipt-line">
+                <span>Account</span>
+                <strong>${receiptEscape(data.accountName || '-')}</strong>
+            </div>
+
+            <div class="receipt-line">
+                <span>Phone</span>
+                <strong>${receiptEscape(data.phone || '-')}</strong>
+            </div>
+
+            <div class="receipt-line">
+                <span>Date</span>
+                <strong>${receiptDate(data.requestedAt)}</strong>
+            </div>
+
+            <div class="receipt-line">
+                <span>Status</span>
+                <strong class="receipt-status">${statusText}</strong>
+            </div>
+        </div>
+
+        <button class="receipt-close-btn"
+                onclick="closeWithdrawalReceipt()">
+            ပိတ်မည်
+        </button>
+    `;
+
+    overlay.classList.add('show');
+}
+
+function closeWithdrawalReceipt(){
+    const overlay = document.getElementById('withdrawalReceiptOverlay');
+    if(overlay) overlay.classList.remove('show');
+}
+
+async function openLatestWithdrawalReceipt(){
+    if(!currentUser){
+        showToast('❌ Please login','error');
+        return;
+    }
+
+    try{
+        const snap = await db.collection('withdrawals')
+            .where('userId','==',currentUser.uid)
+            .limit(30)
+            .get();
+
+        if(snap.empty){
+            showToast('🧾 Withdrawal Receipt မရှိသေးပါ','error');
+            return;
+        }
+
+        const docs = snap.docs.slice().sort(function(a,b){
+            const av = a.data().requestedAt;
+            const bv = b.data().requestedAt;
+
+            const at = av && typeof av.toMillis === 'function'
+                ? av.toMillis()
+                : (av && av.seconds ? av.seconds * 1000 : 0);
+
+            const bt = bv && typeof bv.toMillis === 'function'
+                ? bv.toMillis()
+                : (bv && bv.seconds ? bv.seconds * 1000 : 0);
+
+            return bt - at;
+        });
+
+        const doc = docs[0];
+        const d = doc.data() || {};
+
+        showWithdrawalReceipt({
+            receiptNo:d.receiptNo || ('CT-' + doc.id.slice(-8).toUpperCase()),
+            username:d.username || 'User',
+            amount:d.amount || 0,
+            method:d.method || '-',
+            accountName:d.accountName || '-',
+            phone:d.phone || '-',
+            status:d.status || 'pending',
+            requestedAt:d.requestedAt
+        });
+
+    }catch(e){
+        console.error('Withdrawal receipt error:',e);
+        showToast('❌ Receipt ဖတ်မရပါ','error');
+    }
+}
+

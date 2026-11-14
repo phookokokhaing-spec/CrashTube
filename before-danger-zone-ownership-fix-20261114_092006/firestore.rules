@@ -1,0 +1,311 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    function isActiveUser(uid) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/users/$(uid))
+        && get(/databases/$(database)/documents/users/$(uid)).data.get('isBanned', false) != true;
+    }
+
+    function isAdmin() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+        && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.active == true;
+    }
+
+    function hasActiveAdAccess(uid) {
+      return exists(/databases/$(database)/documents/adAccess/$(uid))
+        && get(/databases/$(database)/documents/adAccess/$(uid)).data.active == true
+        && get(/databases/$(database)/documents/adAccess/$(uid)).data.expiresAt is timestamp
+        && request.time < get(/databases/$(database)/documents/adAccess/$(uid)).data.expiresAt;
+    }
+
+    match /adAccess/{uid} {
+      allow get: if isOwner(uid) || isAdmin();
+      allow list: if isAdmin();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /admins/{uid} {
+      allow get: if isOwner(uid) || isAdmin();
+      allow list: if isAdmin();
+      allow create, update, delete: if false;
+    }
+
+    match /users/{uid} {
+      allow create: if isOwner(uid)
+        && request.resource.data.get('isBanned', false) != true;
+      allow get: if isOwner(uid) || isAdmin();
+      allow list: if isAdmin();
+      allow update: if isAdmin()
+        || (isOwner(uid)
+          && resource.data.get('isBanned', false) != true
+          && request.resource.data.get('isBanned', false)
+              == resource.data.get('isBanned', false)
+          && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['level']));
+      allow delete: if isAdmin();
+    }
+
+    match /transactions/{id} {
+      allow create: if isActiveUser(request.auth.uid)
+        && request.resource.data.userId == request.auth.uid;
+      allow read: if isAdmin()
+        || (signedIn() && resource.data.userId == request.auth.uid);
+      allow update, delete: if isAdmin();
+    }
+
+    match /adWatches/{id} {
+      allow read: if isAdmin()
+        || (signedIn() && id.matches('^' + request.auth.uid + '.*$'));
+      allow create, update: if isActiveUser(request.auth.uid)
+        && id.matches('^' + request.auth.uid + '.*$')
+        && hasActiveAdAccess(request.auth.uid);
+      allow delete: if isAdmin();
+    }
+
+    match /levelUpgradeRequests/{id} {
+      function validPaidLevelRequest() {
+        return request.resource.data.userId == request.auth.uid
+          && id.matches('^' + request.auth.uid + '_LV[0-9]+$')
+          && request.resource.data.status == 'pending'
+          && request.resource.data.fromLevel is number
+          && request.resource.data.toLevel is number
+          && request.resource.data.fromLevel >= 1
+          && request.resource.data.fromLevel < 20
+          && request.resource.data.toLevel <= 20
+          && request.resource.data.toLevel == request.resource.data.fromLevel + 1
+          && request.resource.data.amountMMK == 5000
+          && request.resource.data.paymentMethod in ['WavePay', 'KPay']
+          && request.resource.data.reference is string
+          && request.resource.data.reference.matches('^[0-9]{5}$')
+          && request.resource.data.keys().hasOnly([
+            'userId', 'username', 'email', 'fromLevel', 'toLevel',
+            'amountMMK', 'paymentMethod', 'reference', 'status', 'createdAt'
+          ]);
+      }
+
+      allow get: if isAdmin()
+        || (signedIn() && id.matches('^' + request.auth.uid + '_LV[0-9]+$'));
+      allow list: if isAdmin();
+      allow create: if isActiveUser(request.auth.uid) && validPaidLevelRequest();
+      allow update: if isAdmin()
+        || (isActiveUser(request.auth.uid)
+          && resource.data.userId == request.auth.uid
+          && resource.data.status == 'rejected'
+          && validPaidLevelRequest());
+      allow delete: if isAdmin();
+    }
+
+    match /freeLevelRequests/{uid} {
+      function validFreeLevelRequest() {
+        return request.resource.data.userId == request.auth.uid
+          && request.resource.data.status == 'pending'
+          && request.resource.data.fromLevel is number
+          && request.resource.data.toLevel is number
+          && request.resource.data.toLevel == request.resource.data.fromLevel + 1
+          && request.resource.data.keys().hasOnly([
+            'userId', 'username', 'email',
+            'fromLevel', 'toLevel', 'status', 'createdAt'
+          ]);
+      }
+
+      allow get: if isOwner(uid) || isAdmin();
+      allow list: if isAdmin();
+      allow create: if isActiveUser(uid) && validFreeLevelRequest();
+      allow update: if isAdmin()
+        || (isActiveUser(uid)
+          && resource.data.status == 'rejected'
+          && validFreeLevelRequest());
+      allow delete: if isAdmin();
+    }
+
+    match /withdrawals/{id} {
+      allow create: if isActiveUser(request.auth.uid)
+        && request.resource.data.userId == request.auth.uid;
+      allow read: if isAdmin()
+        || (signedIn() && resource.data.userId == request.auth.uid);
+      allow update, delete: if isAdmin();
+    }
+
+    match /withdrawRequests/{id} {
+      allow read, write: if isAdmin();
+    }
+    match /dailyTop3Rewards/{id} {
+      // Only Admin can create reward nominations for users.
+      allow create: if isAdmin();
+      allow read: if isAdmin()
+        || (signedIn() && resource.data.userId == request.auth.uid);
+      allow update, delete: if isAdmin();
+    }
+
+    // Public leaderboard: signed-in users may view rankings.
+    // Each user may only create/update their own daily entry.
+    match /publicLeaderboard/{id} {
+      allow read: if signedIn();
+
+      allow create: if isActiveUser(request.auth.uid)
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.date is string
+        && id == request.auth.uid + '_' + request.resource.data.date
+        && request.resource.data.keys().hasOnly([
+          'userId', 'username', 'date', 'count',
+          'totalCoins', 'updatedAt'
+        ]);
+
+      allow update: if isActiveUser(request.auth.uid)
+        && resource.data.userId == request.auth.uid
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.date == resource.data.date
+        && id == request.auth.uid + '_' + request.resource.data.date
+        && request.resource.data.keys().hasOnly([
+          'userId', 'username', 'date', 'count',
+          'totalCoins', 'updatedAt'
+        ]);
+
+      allow delete: if isAdmin();
+    }
+
+    match /settings/{docId} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
+
+    match /adAccessRequests/{uid} {
+      function validPendingAdAccessRequest() {
+        let d = request.resource.data;
+
+        return d.userId == request.auth.uid
+          && d.status == 'pending'
+          && d.keys().hasAll([
+            'userId', 'email', 'username', 'packageId', 'packageName',
+            'durationDays', 'amountMMK', 'paymentMethod', 'reference',
+            'status', 'requestedAt', 'historyId'
+          ])
+          && d.keys().hasOnly([
+            'userId', 'email', 'username', 'packageId', 'packageName',
+            'durationDays', 'amountMMK', 'paymentMethod', 'reference',
+            'status', 'requestedAt', 'historyId'
+          ])
+          && d.historyId is string
+          && d.historyId.size() > 0
+          && (
+            (d.packageId == 'bronze' && d.packageName == 'Bronze'
+              && d.durationDays == 15 && d.amountMMK == 5000)
+            || (d.packageId == 'silver' && d.packageName == 'Silver'
+              && d.durationDays == 30 && d.amountMMK == 10000)
+            || (d.packageId == 'gold' && d.packageName == 'Gold'
+              && d.durationDays == 60 && d.amountMMK == 20000)
+            || (d.packageId == 'diamond' && d.packageName == 'Diamond'
+              && d.durationDays == 90 && d.amountMMK == 30000)
+          )
+          && d.paymentMethod in ['WavePay', 'KBZPay']
+          && d.reference is string
+          && d.reference.matches('^[A-Z0-9]{5}$');
+      }
+
+      allow get: if isOwner(uid) || isAdmin();
+      allow list: if isAdmin();
+
+      allow create: if isActiveUser(uid)
+        && validPendingAdAccessRequest();
+
+      allow update: if isAdmin()
+        || (isActiveUser(uid)
+          && resource.data.status in ['rejected', 'approved']
+          && validPendingAdAccessRequest());
+
+      allow delete: if isAdmin();
+
+      match /history/{historyId} {
+        allow get, list: if isOwner(uid) || isAdmin();
+
+        allow create: if isActiveUser(uid)
+          && validPendingAdAccessRequest()
+          && request.resource.data.historyId == historyId
+          && getAfter(
+            /databases/$(database)/documents/adAccessRequests/$(uid)
+          ).data.historyId == historyId
+          && getAfter(
+            /databases/$(database)/documents/adAccessRequests/$(uid)
+          ).data.status == 'pending';
+
+        allow update: if isAdmin()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'status', 'approvedAt', 'approvedBy',
+            'rejectedAt', 'rejectedBy', 'expiresAt'
+          ]);
+
+        allow delete: if isAdmin();
+      }
+    }
+
+
+    // NOTIFICATION CENTER
+    match /notifications/{uid}/items/{notificationId} {
+      allow get, list: if isOwner(uid) || isAdmin();
+
+      allow create: if isAdmin()
+        && request.resource.data.keys().hasAll([
+          'title', 'message', 'read', 'createdAt', 'createdBy'
+        ])
+        && request.resource.data.keys().hasOnly([
+          'title', 'message', 'read', 'createdAt', 'createdBy'
+        ])
+        && request.resource.data.title is string
+        && request.resource.data.title.size() > 0
+        && request.resource.data.title.size() <= 80
+        && request.resource.data.message is string
+        && request.resource.data.message.size() > 0
+        && request.resource.data.message.size() <= 500
+        && request.resource.data.read == false
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.createdBy == request.auth.uid;
+
+      allow update: if isAdmin()
+        || (isOwner(uid)
+          && resource.data.read == false
+          && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['read', 'readAt'])
+          && request.resource.data.read == true
+          && request.resource.data.readAt is timestamp);
+
+      allow delete: if isAdmin();
+    }
+
+    // WEB PUSH TOKENS - each user can manage only their own browser token
+    match /users/{uid}/fcmTokens/{tokenId} {
+      allow get, list: if isOwner(uid);
+
+      allow create, update: if isOwner(uid)
+        && request.resource.data.keys().hasAll([
+          'token', 'platform', 'createdAt', 'updatedAt'
+        ])
+        && request.resource.data.keys().hasOnly([
+          'token', 'platform', 'createdAt', 'updatedAt'
+        ])
+        && request.resource.data.token is string
+        && request.resource.data.token.size() > 0
+        && request.resource.data.token.size() <= 4096
+        && request.resource.data.platform == 'web'
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.updatedAt is timestamp;
+
+      allow delete: if isOwner(uid);
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

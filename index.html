@@ -5812,6 +5812,50 @@ background: linear-gradient(
 }
 </style>
 
+
+<style id="dangerZoneStyles">
+#dangerZonePanel {
+    display: none;
+    margin: 12px;
+    padding: 17px;
+    border: 2px solid #ef4444;
+    border-radius: 18px;
+    color: #fff;
+    background: linear-gradient(135deg,#450a0a,#991b1b,#450a0a);
+    box-shadow: 0 8px 28px rgba(239,68,68,.3);
+    position: relative;
+    z-index: 20;
+}
+#dangerZonePanel .dz-inner {
+    display: flex;
+    align-items: flex-start;
+    gap: 13px;
+}
+#dangerZonePanel .dz-icon {
+    font-size: 32px;
+}
+#dangerZonePanel .dz-title {
+    color: #fecaca;
+    font-size: 12px;
+    font-weight: 900;
+    letter-spacing: 2px;
+}
+#dangerZonePanel .dz-subtitle {
+    margin-top: 4px;
+    font-size: 19px;
+    font-weight: 1000;
+}
+#dangerZonePanel p {
+    margin: 8px 0 0;
+    font-size: 13px;
+    line-height: 1.6;
+}
+#dangerZonePanel .dz-note {
+    color: #fecaca;
+    font-size: 12px;
+}
+</style>
+
 </head>
 <body>
 
@@ -6122,6 +6166,23 @@ background: linear-gradient(
     <!-- APP CONTAINER -->
     <!-- ============================================================ -->
     <div id="appContainer">
+
+        <section id="dangerZonePanel" role="alert"
+            aria-live="assertive" style="display:none;">
+            <div class="dz-inner">
+                <div class="dz-icon">⛔</div>
+                <div class="dz-content">
+                    <div class="dz-title">DANGER ZONE</div>
+                    <div class="dz-subtitle">ACCOUNT RESTRICTED</div>
+                    <p>သင့်အကောင့်ကို Admin မှ ယာယီကန့်သတ်ထားပါသည်။</p>
+                    <p class="dz-note">
+                        Reward၊ Exchange နှင့် Withdrawal လုပ်ဆောင်ချက်များ
+                        ယာယီပိတ်ထားပါသည်။ Admin မှ ပြန်လည်ခွင့်ပြုပြီးမှ
+                        ပုံမှန်အသုံးပြုနိုင်ပါမည်။
+                    </p>
+                </div>
+            </div>
+        </section>
 
         <!-- ============================================ -->
         <!-- TOP MENU BAR -->
@@ -7944,6 +8005,7 @@ function getAdAccessRequestPanelHtml() {
 
 
 async function requestAdAccess() {
+    if (isAccountRestricted()) { showRestrictedNotice(); return; }
     if (!currentUser) {
         showToast('Login ဝင်ပြီးမှ Request တင်နိုင်ပါမည်။', 'error');
         return;
@@ -8335,7 +8397,7 @@ async function adminRevokeAdAccess() {
 }
 
 async function flushPendingAdRewards(force = false) {
-    if (!currentUser || !hasActiveAdAccess() || _adRewardFlushPromise) return false;
+    if (!currentUser || isAccountRestricted() || !hasActiveAdAccess() || _adRewardFlushPromise) return false;
 
     const pending = getPendingAdRewards();
     if (!pending.count || (!force && pending.count < AD_SYNC_BATCH)) return false;
@@ -8679,6 +8741,22 @@ if(document.body) _uiLangObserver.observe(document.body,{subtree:true,childList:
 let adLinks = [];
 let appLinks = [];
 let currentUser = null;
+
+// Account restriction helpers
+function isAccountRestricted() {
+    return !!currentUser && userData.isBanned === true;
+}
+
+function showRestrictedNotice() {
+    showToast('⛔ Account Restricted — Admin မှ စစ်ဆေးနေပါသည်', 'error');
+}
+
+function updateDangerZoneUI() {
+    const panel = document.getElementById('dangerZonePanel');
+    if (panel) {
+        panel.style.display = isAccountRestricted() ? 'block' : 'none';
+    }
+}
 let userData = {
     coins: 0, usdt: 0, username: 'User', email: '',
     isBanned: false, level: 1, totalAds: 0, refCode: '',
@@ -8935,6 +9013,7 @@ function updateLevelUI() {
 }
 
 async function submitFreeLevelRequest() {
+    if (isAccountRestricted()) { showRestrictedNotice(); return; }
     if (!currentUser) {
         showToast('Login လုပ်ပါ', 'error');
         return;
@@ -9096,6 +9175,7 @@ async function loadPaidLevelRequestStatus(force = false) {
 }
 
 async function submitPaidLevelRequest() {
+    if (isAccountRestricted()) { showRestrictedNotice(); return; }
     if (!currentUser) { showToast('Login လုပ်ပါ', 'error'); return; }
     const next = getNextLevel();
     if (!next) { showToast('MAX LEVEL ရောက်ပြီးပါပြီ', 'warning'); return; }
@@ -9166,6 +9246,7 @@ async function submitPaidLevelRequest() {
 
 
 async function claimDailyAdsReward() {
+    if (isAccountRestricted()) { showRestrictedNotice(); return; }
     if(!currentUser)return;
     if (!hasActiveAdAccess()) {
         showToast('🔒 Ads Free Access မရှိသေးပါ။', 'error');
@@ -9184,6 +9265,9 @@ async function claimDailyAdsReward() {
         await db.runTransaction(async tx=>{
             const adSnap=await tx.get(adRef); const userSnap=await tx.get(userRef);
             if(!userSnap.exists)throw new Error('USER_NOT_FOUND');
+            if (userSnap.data().isBanned === true) {
+                throw new Error('ACCOUNT_RESTRICTED');
+            }
             const adData=adSnap.exists?adSnap.data():{};
             if(Number(adData.count||0)<DAILY_AD_TARGET)throw new Error('ADS_NOT_ENOUGH');
             if(adData.dailyRewardClaimed===true)throw new Error('ALREADY_CLAIMED');
@@ -9271,6 +9355,8 @@ function updateAchievementsUI() {
     }
 }
 async function claimAchievement(id, reward) {
+    if (!currentUser) return;
+    if (isAccountRestricted()) { showRestrictedNotice(); return; }
     if (userData.claimedAch && userData.claimedAch.includes(id)) return;
     const ach = ACHIEVEMENTS.find(a => a.id === id);
     if (!ach || getAchProgress(ach) < ach.target) return;
@@ -9698,6 +9784,7 @@ function closeAdPageAndReturn() {
 }
 
 async function claimAdReward() {
+    if (isAccountRestricted()) { closeAdPageAndReturn(); showRestrictedNotice(); return; }
     if (!currentUser || !currentAdCard) return;
     if (!hasActiveAdAccess()) {
         closeAdPageAndReturn();
@@ -9852,6 +9939,7 @@ async function loadDashboard() {
 }
 
 async function claimTopBonus(amount) {
+    if (isAccountRestricted()) { showRestrictedNotice(); return; }
     if (!currentUser) return;
     const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Yangon' }).format(new Date());
     const claimedKey = 'topBonusClaimed_' + today + '_' + currentUser.uid;
@@ -9895,6 +9983,7 @@ function updateDailyBonusUI() {
 }
 
 async function claimDailyBonus() {
+    if (isAccountRestricted()) { showRestrictedNotice(); return; }
     if (!currentUser) { showToast('❌ Please login', 'error'); return; }
     const lastClaimKey = 'dailyBonus_' + currentUser.uid;
     const lastClaim = parseInt(localStorage.getItem(lastClaimKey) || '0');
@@ -10199,6 +10288,7 @@ async function adminToggleExchange() {
     showToast(isExchangeOpen ? '✅ Opened' : '🔒 Closed');
 }
 function openExchangeFromMarket() {
+    if (isAccountRestricted()) { showRestrictedNotice(); return; }
     if (!(isExchangeOpen && isExchangeDateOpen())) { showToast('🔒 Exchange ပိတ်ထားပါသည်', 'warning'); return; }
     openModal('exchangeModal');
 }
@@ -10215,6 +10305,7 @@ function calculateExchange() {
 }
 
 async function confirmExchange() {
+    if (isAccountRestricted()) { showRestrictedNotice(); return; }
     if (!currentUser) { showToast('❌ Please login', 'error'); return; }
     if (!(isExchangeOpen && isExchangeDateOpen())) { showToast('🔒 Exchange ပိတ်ထားပါသည်', 'error'); return; }
     if (!coinMmkRate || coinMmkRate <= 0) { showToast('❌ Admin မှ 10,000 Coin = MMK Rate သတ်မှတ်ပေးရန်လိုသည်', 'error'); return; }
@@ -10231,6 +10322,9 @@ async function confirmExchange() {
             const snap = await tx.get(userRef);
             if (!snap.exists) throw new Error('USER_NOT_FOUND');
             const data = snap.data() || {};
+            if (data.isBanned === true) {
+                throw new Error('ACCOUNT_RESTRICTED');
+            }
             const serverCoins = Math.max(0, Number(data.coins) || 0);
             const serverMmk = Math.max(0, Number(data.mmkBalance) || 0);
             if (serverCoins < amt) throw new Error('INSUFFICIENT_COINS');
@@ -10267,6 +10361,7 @@ async function confirmExchange() {
 }
 
 async function requestWithdraw() {
+    if (isAccountRestricted()) { showRestrictedNotice(); return; }
     if (!isWithdrawOpen) { showToast('❌ Withdraw ပိတ်ထားပါသည်', 'error'); return; }
     if (!currentUser) { showToast('❌ Please login', 'error'); return; }
 
@@ -10306,6 +10401,10 @@ async function requestWithdraw() {
             }
 
             const d = snap.data() || {};
+
+                if (d.isBanned === true) throw new Error('ACCOUNT_RESTRICTED');if (d.isBanned === true) {
+                throw new Error('ACCOUNT_RESTRICTED');
+            }
             const balance = Math.max(0, Number(d.mmkBalance) || 0);
 
             if (balance < amount) {
@@ -10571,6 +10670,8 @@ async function handleLogout() {
 auth.onAuthStateChanged(async (user) => {
     if (user) {
         currentUser = user;
+        userData.isBanned = true;
+        updateDangerZoneUI();
         resetNotificationState();
         startNotificationListener(user.uid);
         refreshNotificationBadge();
@@ -10584,7 +10685,8 @@ auth.onAuthStateChanged(async (user) => {
             const doc = await db.collection('users').doc(user.uid).get();
             if (doc.exists) {
                 const data = doc.data();
-                if (data.isBanned) { await auth.signOut(); showToast('သင့်အကောင့်ကို system မှ စစ်ဆေးနေဆဲ', 'error'); return; }
+                userData.isBanned = data.isBanned === true;
+                updateDangerZoneUI();
                 userData.coins = data.coins || 0;
                 userData.username = data.username || 'User';
                 userData.email = data.email || '';
@@ -10617,6 +10719,7 @@ auth.onAuthStateChanged(async (user) => {
                     await db.collection('users').doc(user.uid).update({ refCode: userData.refCode });
                 }
                 saveCoinsToLocal(userData.coins);
+                updateDangerZoneUI();
                 updateUI();
             }
         } catch (error) {}
@@ -10647,6 +10750,9 @@ auth.onAuthStateChanged(async (user) => {
         db.collection('users').doc(user.uid).onSnapshot((doc) => {
             if (doc.exists) {
                 const d = doc.data();
+                userData.isBanned = d.isBanned === true;
+                updateDangerZoneUI();
+
                 const pendingLive = getPendingAdRewards();
                 const _oldShownCoins = Number(userData.coins) || 0;
                 const _serverCoins = Number(d.coins) || 0;
@@ -10700,6 +10806,8 @@ auth.onAuthStateChanged(async (user) => {
         clearAdAccessState();
         resetNotificationState();
         currentUser = null;
+        userData.isBanned = false;
+        updateDangerZoneUI();
         document.getElementById('authScreen').classList.add('active');
         document.getElementById('appContainer').classList.remove('active');
         document.getElementById('floatingPlayBtn').style.display = 'none';
@@ -13068,6 +13176,8 @@ async function loadTransactionHistory() {
     } catch (e) { container.innerHTML = '<div class="table-loading">Failed</div>'; }
 }
 async function sendCoinGift() {
+    if (!currentUser) return;
+    if (isAccountRestricted()) { showRestrictedNotice(); return; }
     const receiverEmail = document.getElementById('giftReceiverEmail').value.trim();
     const amount = parseInt(document.getElementById('giftAmount').value);
     const msgEl = document.getElementById('giftMsg');
@@ -13083,7 +13193,11 @@ async function sendCoinGift() {
             const rRef = db.collection('users').doc(receiverDoc.id);
             const sDoc = await tx.get(sRef);
             const rDoc = await tx.get(rRef);
-            const senderCoins = Math.max(0, Number(sDoc.data()?.coins) || 0);
+
+            if (!sDoc.exists || sDoc.data()?.isBanned === true) {
+                throw new Error('ACCOUNT_RESTRICTED');
+            }
+const senderCoins = Math.max(0, Number(sDoc.data()?.coins) || 0);
             const receiverCoins = Math.max(0, Number(rDoc.data()?.coins) || 0);
             if (senderCoins < totalCost) throw new Error('INSUFFICIENT_COINS');
             const newSenderCoins = senderCoins - totalCost;
@@ -13283,6 +13397,7 @@ function showVideoClaimPopup() {
 
 // --- Claim → Ad Page → Coin ---
 function claimVideoCoin() {
+    if (isAccountRestricted()) { showRestrictedNotice(); return; }
     if (isUpdatingCoins) { showToast('⏳ Please wait...', 'warning'); return; }
     if (!currentUser) { showToast('❌ Please login', 'error'); return; }
     if (!adLinks || adLinks.length === 0) {
@@ -13361,6 +13476,7 @@ function startVideoAdPage(reward) {
 }
 
 async function giveVideoReward(reward) {
+    if (isAccountRestricted()) { closeVideoAdPage(); showRestrictedNotice(); return; }
     if (!currentUser) { showToast('❌ Please login', 'error'); return; }
     if (dailyAdsToday >= DAILY_AD_TARGET) {
         closeVideoAdPage();
@@ -13948,6 +14064,7 @@ setTimeout(() => {
 
     // ---- Execute exchange ----
     window.dmxGo = async function(){
+        if (isAccountRestricted()) { showRestrictedNotice(); return; }
         const inp = document.getElementById('dmxIn');
         if (!inp) return;
         const v = parseInt(inp.value) || 0;
@@ -14050,6 +14167,7 @@ function renderFrameShop(){
     }).join('');
 }
 async function buyProfileFrame(frameId){
+    if (isAccountRestricted()) { showRestrictedNotice(); return; }
     if (!currentUser) {
         showToast('❌ Please login','error');
         return;
